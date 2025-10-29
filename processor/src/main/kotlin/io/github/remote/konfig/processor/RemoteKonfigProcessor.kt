@@ -15,13 +15,14 @@ import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.ksp.toClassName
 import com.squareup.kotlinpoet.ksp.writeTo
 import com.squareup.kotlinpoet.parameterizedBy
-import com.squareup.kotlinpoet.STAR
-import com.squareup.kotlinpoet.FunSpec
 
 private const val HILT_REMOTE_CONFIG_ANNOTATION = "io.github.remote.konfig.HiltRemoteConfig"
 private const val SERIALIZABLE_ANNOTATION = "kotlinx.serialization.Serializable"
@@ -53,6 +54,7 @@ class RemoteKonfigProcessor(
     private val processed = mutableSetOf<String>()
     private val entries = mutableListOf<RemoteConfigEntry>()
     private val sourceFiles = mutableSetOf<KSFile>()
+    private val seenKeys = mutableSetOf<String>()
     private var registryGenerated = false
     private var hadError = false
 
@@ -94,6 +96,12 @@ class RemoteKonfigProcessor(
                 return@forEach
             }
 
+            if (!seenKeys.add(key)) {
+                logger.error("Duplicate @HiltRemoteConfig key '$key' detected.", symbol)
+                hadError = true
+                return@forEach
+            }
+
             if (!symbol.hasSerializableAnnotation()) {
                 logger.error(
                     "${symbol.simpleName.asString()} must be annotated with @Serializable to use @HiltRemoteConfig.",
@@ -103,8 +111,7 @@ class RemoteKonfigProcessor(
                 return@forEach
             }
 
-            val packageName = symbol.packageName.asString()
-            val targetClassName = ClassName(packageName, symbol.simpleName.asString())
+            val targetClassName = symbol.toClassName()
             val containingFile = symbol.containingFile
             if (containingFile == null) {
                 logger.error("@HiltRemoteConfig targets must be declared in source files.", symbol)
@@ -165,7 +172,7 @@ class RemoteKonfigProcessor(
             .addType(moduleType)
             .build()
 
-        fileSpec.writeTo(codeGenerator, Dependencies(true, entry.sourceFile))
+        fileSpec.writeTo(codeGenerator, Dependencies(false, entry.sourceFile))
     }
 
     private fun generateRegistry() {
@@ -209,9 +216,9 @@ class RemoteKonfigProcessor(
             .build()
 
         val dependencies = if (sourceFiles.isEmpty()) {
-            Dependencies(false)
+            Dependencies(true)
         } else {
-            Dependencies(false, *sourceFiles.toTypedArray())
+            Dependencies(true, *sourceFiles.toTypedArray())
         }
 
         FileSpec.builder(GENERATED_PACKAGE, "RemoteKonfigRegistry")
