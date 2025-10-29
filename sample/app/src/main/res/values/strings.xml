@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Remote Konfig Sample</string>
+    <string name="current_value_label">Current remote value</string>
+    <string name="override_hint">Enter JSON override</string>
+    <string name="apply_override">Apply override</string>
+    <string name="clear_override">Clear override</string>
+    <string name="status_idle">Set an override and re-open the screen to see changes.</string>
+    <string name="override_saved">Override saved. Re-open the activity to see it take effect.</string>
+    <string name="override_empty">Override cannot be empty.</string>
+    <string name="override_cleared">Override cleared.</string>
+    <string name="no_remote_value">No remote value available.</string>
+</resources>
