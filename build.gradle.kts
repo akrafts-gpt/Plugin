@@ -6,9 +6,3 @@ plugins {
     alias(libs.plugins.kotlin.kapt) apply false
     alias(libs.plugins.hilt) apply false
 }
-
-subprojects {
-    plugins.withType<org.jetbrains.kotlin.gradle.plugin.KotlinBasePluginWrapper> {
-        the<org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension>().jvmToolchain(17)
-    }
-}
