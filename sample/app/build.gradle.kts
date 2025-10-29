@@ -3,6 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
     id("io.github.remote.konfig")
 }
 
@@ -39,6 +41,9 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation(libs.hilt.android)
     implementation(libs.material)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(project(":api"))
+    ksp(project(":processor"))
     kapt(libs.hilt.compiler)
 }
 

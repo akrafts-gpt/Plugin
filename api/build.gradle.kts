@@ -27,4 +27,5 @@ dependencies {
     implementation(libs.kotlin.stdlib)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.serialization.json)
+    compileOnly(libs.hilt.android)
 }
