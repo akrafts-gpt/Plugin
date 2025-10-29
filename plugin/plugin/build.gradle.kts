@@ -34,8 +34,7 @@ gradlePlugin {
 
 publishing {
     publications {
-        create<MavenPublication>("pluginMaven") {
-            from(components["java"])
+        named<MavenPublication>("pluginMaven") {
             artifactId = "remote-konfig-gradle-plugin"
         }
     }
