@@ -14,15 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-toolchainManagement {
-    jvm {
-        jdkDownload {
-            repositories {
-                jdkRepository("temurin")
-            }
-        }
-    }
-}
-
 rootProject.name = "remote-konfig-plugin"
 include(":plugin")
