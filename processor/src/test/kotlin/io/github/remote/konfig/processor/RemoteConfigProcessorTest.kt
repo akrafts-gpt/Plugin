@@ -9,6 +9,226 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
+private val STUB_SOURCES = listOf(
+    SourceFile.kotlin(
+        "ApiStubs.kt",
+        """
+        package io.github.remote.konfig
+
+        @Target(AnnotationTarget.CLASS)
+        annotation class HiltRemoteConfig(val key: String)
+
+        class OverrideStore {
+            fun get(key: String): String? = null
+        }
+
+        interface RemoteConfigProvider {
+            fun getRemoteConfig(key: String): String? = null
+        }
+
+        interface RemoteConfigScreen {
+            val id: String
+            val title: String
+            fun show(fragmentManager: androidx.fragment.app.FragmentManager)
+        }
+
+        interface RemoteConfigScreenProvider {
+            fun screens(): Set<RemoteConfigScreen> = emptySet()
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "EditorStubs.kt",
+        """
+        package io.github.remote.konfig.debug
+
+        interface RemoteConfigEditor<T> {
+            val key: String
+            fun defaultInstance(): T
+            fun fields(): List<EditorField<T>>
+        }
+
+        data class EditorField<T>(
+            val name: String,
+            val type: String,
+            val getter: (T) -> Any?,
+            val setter: (T, Any?) -> T,
+        )
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidOsBundleStub.kt",
+        """
+        package android.os
+
+        class Bundle {
+            private val values = mutableMapOf<String, Any?>()
+
+            fun putString(key: String, value: String?) {
+                values[key] = value
+            }
+
+            fun getString(key: String): String? = values[key] as? String
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidContentContextStub.kt",
+        """
+        package android.content
+
+        open class Context
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidAppDialogStub.kt",
+        """
+        package android.app
+
+        open class Dialog
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidRStub.kt",
+        """
+        @file:Suppress("ClassName")
+
+        package android
+
+        object R {
+            object string {
+                const val ok: Int = 1
+            }
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidxCoreBundleOfStub.kt",
+        """
+        package androidx.core.os
+
+        import android.os.Bundle
+
+        fun bundleOf(vararg pairs: Pair<String, Any?>): Bundle {
+            val bundle = Bundle()
+            for ((key, value) in pairs) {
+                bundle.putString(key, value as? String)
+            }
+            return bundle
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidxFragmentStubs.kt",
+        """
+        package androidx.fragment.app
+
+        import android.content.Context
+        import android.os.Bundle
+
+        open class FragmentManager
+
+        open class Fragment {
+            var arguments: Bundle? = null
+
+            fun requireArguments(): Bundle = arguments ?: Bundle().also { arguments = it }
+
+            fun requireContext(): Context = Context()
+        }
+
+        open class DialogFragment : Fragment() {
+            fun show(fragmentManager: FragmentManager, tag: String?) {
+                // no-op stub
+            }
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidxAppCompatAlertDialogStub.kt",
+        """
+        package androidx.appcompat.app
+
+        import android.app.Dialog
+        import android.content.Context
+
+        open class AlertDialog : Dialog()
+
+        class Builder(private val context: Context) {
+            fun setTitle(title: CharSequence?): Builder = this
+            fun setMessage(message: CharSequence?): Builder = this
+            fun setPositiveButton(textId: Int, listener: Any?): Builder = this
+            fun create(): AlertDialog = AlertDialog()
+        }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "DaggerStubs.kt",
+        """
+        package dagger
+
+        import kotlin.reflect.KClass
+
+        @Target(AnnotationTarget.CLASS)
+        annotation class Module
+
+        @Target(AnnotationTarget.FUNCTION)
+        annotation class Provides
+
+        @Target(AnnotationTarget.CLASS, AnnotationTarget.FUNCTION)
+        annotation class Component(val value: KClass<*>)
+
+        @Target(AnnotationTarget.FUNCTION)
+        annotation class Binds
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "DaggerHiltStubs.kt",
+        """
+        package dagger.hilt
+
+        import kotlin.reflect.KClass
+
+        @Target(AnnotationTarget.CLASS)
+        annotation class InstallIn(vararg val value: KClass<*>)
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "DaggerHiltComponentsStub.kt",
+        """
+        package dagger.hilt.components
+
+        interface SingletonComponent
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "DaggerMultibindingsStub.kt",
+        """
+        package dagger.multibindings
+
+        @Target(AnnotationTarget.FUNCTION)
+        annotation class IntoSet
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "JavaxInjectStub.kt",
+        """
+        package javax.inject
+
+        @Target(AnnotationTarget.CONSTRUCTOR, AnnotationTarget.FIELD, AnnotationTarget.FUNCTION)
+        annotation class Inject
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "KotlinxSerializableStub.kt",
+        """
+        package kotlinx.serialization
+
+        @Target(AnnotationTarget.CLASS)
+        annotation class Serializable
+        """.trimIndent(),
+    ),
+)
+
 class RemoteConfigProcessorTest {
 
     @Test
@@ -29,7 +249,7 @@ class RemoteConfigProcessorTest {
 
         val compilation = KotlinCompilation().apply {
             inheritClassPath = true
-            sources = listOf(source)
+            sources = STUB_SOURCES + source
             symbolProcessorProviders = listOf(RemoteConfigProcessorProvider())
             kspIncremental = false
         }

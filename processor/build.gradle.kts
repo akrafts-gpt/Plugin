@@ -4,7 +4,6 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":api"))
     implementation(libs.kotlinpoet)
     implementation(libs.kotlinpoet.ksp)
     implementation(libs.kotlinx.serialization.json)
