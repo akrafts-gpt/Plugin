@@ -23,7 +23,6 @@ tasks.withType<KotlinCompile>().configureEach {
 
 dependencies {
     implementation(gradleApi())
-    testImplementation(kotlin("test"))
     testImplementation(kotlin("test-junit"))
 }
 

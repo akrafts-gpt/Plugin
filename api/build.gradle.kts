@@ -32,6 +32,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.serialization.json)
 
-    testImplementation(kotlin("test"))
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(kotlin("test-junit"))
 }

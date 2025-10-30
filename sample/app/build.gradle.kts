@@ -45,8 +45,7 @@ dependencies {
     implementation(libs.material)
     kapt(libs.hilt.compiler)
 
-    testImplementation(kotlin("test"))
-    testImplementation("junit:junit:4.13.2")
+    testImplementation(kotlin("test-junit"))
 }
 
 kapt {
