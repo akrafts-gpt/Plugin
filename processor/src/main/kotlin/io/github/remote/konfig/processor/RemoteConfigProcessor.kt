@@ -25,6 +25,7 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeName
@@ -70,6 +71,12 @@ private class RemoteConfigProcessor(
                     codeGenerator = codeGenerator,
                     resolver = resolver,
                     logger = logger
+                ).generate()
+
+                ScreenGenerator(
+                    modelClass = declaration,
+                    configKey = key,
+                    codeGenerator = codeGenerator,
                 ).generate()
             }
 
@@ -460,6 +467,178 @@ private class EditorGenerator(
     }
 }
 
+private class ScreenGenerator(
+    private val modelClass: KSClassDeclaration,
+    private val configKey: String,
+    private val codeGenerator: CodeGenerator,
+) {
+    fun generate() {
+        val screenSimpleName = "${modelClass.simpleName.asString()}RemoteConfigScreen"
+        val dialogSimpleName = "${screenSimpleName}DialogFragment"
+        val moduleSimpleName = "${screenSimpleName}Module"
+
+        val screenType = ClassName(GENERATED_PACKAGE, screenSimpleName)
+        val dialogType = ClassName(GENERATED_PACKAGE, dialogSimpleName)
+        val moduleType = ClassName(GENERATED_PACKAGE, moduleSimpleName)
+
+        val fileSpec = FileSpec.builder(GENERATED_PACKAGE, screenSimpleName)
+            .addImport("androidx.core.os", "bundleOf")
+            .addImport("kotlin.text", "buildString")
+            .addType(buildScreenType(screenType, dialogType))
+            .addType(buildDialogType(dialogType))
+            .addType(buildBindingModule(screenType, moduleType))
+            .build()
+
+        val source = modelClass.containingFile
+        val dependencies = if (source != null) {
+            Dependencies(aggregating = true, source)
+        } else {
+            Dependencies(aggregating = true)
+        }
+
+        fileSpec.writeTo(codeGenerator, dependencies)
+    }
+
+    private fun buildScreenType(screenType: ClassName, dialogType: ClassName): TypeSpec {
+        val constructor = FunSpec.constructorBuilder()
+            .addAnnotation(INJECT)
+            .addParameter("overrideStore", OVERRIDE_STORE)
+            .addParameter("remoteConfigProvider", REMOTE_CONFIG_PROVIDER)
+            .build()
+
+        val builder = TypeSpec.classBuilder(screenType)
+            .addSuperinterface(REMOTE_CONFIG_SCREEN)
+            .primaryConstructor(constructor)
+            .addProperty(
+                PropertySpec.builder("overrideStore", OVERRIDE_STORE, KModifier.PRIVATE)
+                    .initializer("overrideStore")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("remoteConfigProvider", REMOTE_CONFIG_PROVIDER, KModifier.PRIVATE)
+                    .initializer("remoteConfigProvider")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("id", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", configKey)
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("title", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", "${modelClass.simpleName.asString()} for $configKey")
+                    .build(),
+            )
+
+        val dialogTag = "${configKey}_remote_config"
+        val showBody = CodeBlock.builder()
+        showBody.addStatement("val remoteValue = remoteConfigProvider.getRemoteConfig(id)")
+        showBody.addStatement("val overrideValue = overrideStore.get(id)")
+        showBody.addStatement(
+            "%T.newInstance(title, remoteValue, overrideValue).show(fragmentManager, %S)",
+            dialogType,
+            dialogTag,
+        )
+
+        builder.addFunction(
+            FunSpec.builder("show")
+                .addModifiers(KModifier.OVERRIDE)
+                .addParameter("fragmentManager", FRAGMENT_MANAGER)
+                .addCode(showBody.build())
+                .build(),
+        )
+
+        return builder.build()
+    }
+
+    private fun buildDialogType(dialogType: ClassName): TypeSpec {
+        val savedInstanceStateParam = ParameterSpec.builder("savedInstanceState", BUNDLE.copy(nullable = true)).build()
+        val onCreateDialog = FunSpec.builder("onCreateDialog")
+            .addModifiers(KModifier.OVERRIDE)
+            .returns(DIALOG)
+            .addParameter(savedInstanceStateParam)
+            .addCode(
+                """
+                return %T.Builder(requireContext())
+                    .setTitle(requireArguments().getString(ARG_TITLE))
+                    .setMessage(requireArguments().getString(ARG_MESSAGE))
+                    .setPositiveButton(%T.string.ok, null)
+                    .create()
+                """.trimIndent(),
+                ALERT_DIALOG,
+                ANDROID_R,
+            )
+            .build()
+
+        val newInstanceCode = CodeBlock.builder()
+        newInstanceCode.addStatement("val message = buildString {")
+        newInstanceCode.indent()
+        newInstanceCode.addStatement("appendLine(%S)", "Remote value:")
+        newInstanceCode.addStatement("appendLine(remoteValue ?: %S)", "— none —")
+        newInstanceCode.addStatement("appendLine()")
+        newInstanceCode.addStatement("appendLine(%S)", "Override value:")
+        newInstanceCode.addStatement("appendLine(overrideValue ?: %S)", "— none —")
+        newInstanceCode.unindent()
+        newInstanceCode.addStatement("}")
+        newInstanceCode.addStatement(
+            "return %T().apply { arguments = bundleOf(ARG_TITLE to title, ARG_MESSAGE to message) }",
+            dialogType,
+        )
+
+        val companion = TypeSpec.companionObjectBuilder()
+            .addProperty(
+                PropertySpec.builder("ARG_TITLE", STRING)
+                    .addModifiers(KModifier.PRIVATE, KModifier.CONST)
+                    .initializer("%S", "title")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("ARG_MESSAGE", STRING)
+                    .addModifiers(KModifier.PRIVATE, KModifier.CONST)
+                    .initializer("%S", "message")
+                    .build(),
+            )
+            .addFunction(
+                FunSpec.builder("newInstance")
+                    .addParameter("title", STRING)
+                    .addParameter(ParameterSpec.builder("remoteValue", STRING.copy(nullable = true)).build())
+                    .addParameter(ParameterSpec.builder("overrideValue", STRING.copy(nullable = true)).build())
+                    .returns(dialogType)
+                    .addCode(newInstanceCode.build())
+                    .build(),
+            )
+            .build()
+
+        return TypeSpec.classBuilder(dialogType)
+            .addModifiers(KModifier.PRIVATE)
+            .superclass(DIALOG_FRAGMENT)
+            .addFunction(onCreateDialog)
+            .addType(companion)
+            .build()
+    }
+
+    private fun buildBindingModule(screenType: ClassName, moduleType: ClassName): TypeSpec {
+        val bindFunName = "bind${screenType.simpleName}"
+        return TypeSpec.interfaceBuilder(moduleType)
+            .addAnnotation(MODULE)
+            .addAnnotation(
+                AnnotationSpec.builder(INSTALL_IN)
+                    .addMember("%T::class", SINGLETON_COMPONENT)
+                    .build(),
+            )
+            .addFunction(
+                FunSpec.builder(bindFunName)
+                    .addAnnotation(BINDS)
+                    .addAnnotation(INTO_SET)
+                    .addModifiers(KModifier.ABSTRACT)
+                    .addParameter("impl", screenType)
+                    .returns(REMOTE_CONFIG_SCREEN)
+                    .build(),
+            )
+            .build()
+    }
+}
+
 private fun KSClassDeclaration.hiltRemoteConfigKey(): String? {
     val annotation = annotations.firstOrNull { annotation ->
         annotation.shortName.asString() == HILT_REMOTE_CONFIG_SIMPLE ||
@@ -501,6 +680,21 @@ private const val GENERATED_PACKAGE = "io.github.remote.konfig.generated"
 private val STRING = String::class.asTypeName()
 private val REMOTE_CONFIG_EDITOR = ClassName("io.github.remote.konfig.debug", "RemoteConfigEditor")
 private val EDITOR_FIELD = ClassName("io.github.remote.konfig.debug", "EditorField")
+private val REMOTE_CONFIG_SCREEN = ClassName("io.github.remote.konfig", "RemoteConfigScreen")
+private val OVERRIDE_STORE = ClassName("io.github.remote.konfig", "OverrideStore")
+private val REMOTE_CONFIG_PROVIDER = ClassName("io.github.remote.konfig", "RemoteConfigProvider")
+private val FRAGMENT_MANAGER = ClassName("androidx.fragment.app", "FragmentManager")
+private val DIALOG_FRAGMENT = ClassName("androidx.fragment.app", "DialogFragment")
+private val BUNDLE = ClassName("android.os", "Bundle")
+private val DIALOG = ClassName("android.app", "Dialog")
+private val ALERT_DIALOG = ClassName("androidx.appcompat.app", "AlertDialog")
+private val ANDROID_R = ClassName("android", "R")
+private val MODULE = ClassName("dagger", "Module")
+private val INSTALL_IN = ClassName("dagger.hilt", "InstallIn")
+private val SINGLETON_COMPONENT = ClassName("dagger.hilt.components", "SingletonComponent")
+private val BINDS = ClassName("dagger", "Binds")
+private val INTO_SET = ClassName("dagger.multibindings", "IntoSet")
+private val INJECT = ClassName("javax.inject", "Inject")
 private const val SERIALIZABLE_ANNOTATION = "kotlinx.serialization.Serializable"
 private const val HILT_REMOTE_CONFIG_FULL = "io.github.remote.konfig.HiltRemoteConfig"
 private const val HILT_REMOTE_CONFIG_SIMPLE = "HiltRemoteConfig"

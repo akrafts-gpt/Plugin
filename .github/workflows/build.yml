@@ -30,4 +30,6 @@ jobs:
         run: |
           ./gradlew --stacktrace --no-daemon \
             :api:test \
-            :sample:app:assembleDebug
+            :processor:test \
+            :sample:app:assembleDebug \
+            :sample:app:testDebugUnitTest
