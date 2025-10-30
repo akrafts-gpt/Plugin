@@ -1,5 +1,6 @@
 package io.github.remote.konfig.sample
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import dagger.hilt.android.AndroidEntryPoint
@@ -45,6 +46,10 @@ class MainActivity : AppCompatActivity() {
             overrideStore.clearOverride(WELCOME_KEY)
             binding.overrideInput.setText("")
             binding.status.text = getString(R.string.override_cleared)
+        }
+
+        binding.openMenuButton.setOnClickListener {
+            startActivity(Intent(this, ConfigEditorMenuActivity::class.java))
         }
     }
 

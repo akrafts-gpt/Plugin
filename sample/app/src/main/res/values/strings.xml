@@ -9,4 +9,7 @@
     <string name="override_empty">Override cannot be empty.</string>
     <string name="override_cleared">Override cleared.</string>
     <string name="no_remote_value">No remote value available.</string>
+    <string name="open_editor_menu">Open editor menu</string>
+    <string name="editor_menu_title">Remote config editors</string>
+    <string name="no_fields_message">No editable fields generated for this config yet.</string>
 </resources>

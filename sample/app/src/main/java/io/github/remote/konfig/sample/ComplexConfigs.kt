@@ -1,69 +1,65 @@
 package io.github.remote.konfig.sample
 
-import androidx.annotation.Keep
 import io.github.remote.konfig.HiltRemoteConfig
 import kotlinx.serialization.Polymorphic
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-@Keep
 @Serializable
-@HiltRemoteConfig("contentTutorialConfig_52465")
-data class DemoContent(
-    val scamName: String,
-    val phoneNumber: String,
-    val mobileProvider: String,
-    val location: String,
-    val timestamp: Long,
+@HiltRemoteConfig("sample_profile_config")
+data class SampleProfileConfig(
+    val title: String,
+    val contactNumber: String,
+    val provider: String,
+    val region: String,
+    val lastUpdatedEpochMillis: Long,
 )
 
 @Serializable
-enum class Option {
-    Option1,
-    Option2,
-    Option3,
+enum class SampleOption {
+    OPTION_ONE,
+    OPTION_TWO,
+    OPTION_THREE,
 }
 
-@Keep
 @Serializable
-@HiltRemoteConfig("contentTutorialConfig_52432")
-data class TestDemoContent(
-    val scamName: String,
-    val phoneNumber: String,
-    val mobileProvider: String,
-    val location: String,
-    val timestamp: Long,
-    val option: Option,
+@HiltRemoteConfig("sample_profile_with_option")
+data class SampleProfileWithOptionConfig(
+    val title: String,
+    val contactNumber: String,
+    val provider: String,
+    val region: String,
+    val lastUpdatedEpochMillis: Long,
+    val option: SampleOption,
 )
 
-@Keep
 @Serializable
-@HiltRemoteConfig("contentTutorialConfig_52432_test2")
-data class Test2DemoContent(
-    val scamName: String,
-    val phoneNumber: String,
-    val mobileProvider: String,
-    val location: String,
-    val timestamp: Long,
-    val option: Option,
-    val mode: SkipMode,
+@HiltRemoteConfig("sample_deeply_nested")
+data class SampleDeeplyNestedConfig(
+    val title: String,
+    val contactNumber: String,
+    val provider: String,
+    val region: String,
+    val lastUpdatedEpochMillis: Long,
+    val option: SampleOption,
+    val mode: SkipBehavior,
     val enabled: Boolean,
-    val innerField: Inner,
-    val innerList: List<Inner2>,
-    val srings: List<String>,
+    val detail: SampleDetails,
+    val entries: List<SampleEntry>,
+    val tags: List<String>,
 )
 
 @Serializable
-data class Inner(
-    val prop1: String,
-    val allo: Boolean,
-    val inner2: Inner2,
+data class SampleDetails(
+    val label: String,
+    val highlighted: Boolean,
+    val summary: SampleEntry,
 )
 
 @Serializable
-data class Inner2(
-    val prop1: String,
-    val allo: Boolean,
+data class SampleEntry(
+    val label: String,
+    val highlighted: Boolean,
 )
 
 @Serializable
@@ -74,58 +70,56 @@ enum class SampleEnum {
 }
 
 @Serializable
-data class PreviewNestedConfig(
+data class PreviewNestedItem(
     val nestedString: String,
     val nestedBool: Boolean,
 )
 
-@Keep
 @Serializable
-@HiltRemoteConfig("contentTutorialConfig_524322")
-data class PreviewConfig(
-    val aString: String,
-    val aBoolean: Boolean,
-    val anInt: Int,
-    val aLong: Long,
-    val anEnum: SampleEnum,
-    val nestedObject: PreviewNestedConfig,
-    val aList: List<PreviewNestedConfig>,
+@HiltRemoteConfig("sample_preview_config")
+data class SamplePreviewConfig(
+    val title: String,
+    val enabled: Boolean,
+    val maxItems: Int,
+    val expirationMillis: Long,
+    val selection: SampleEnum,
+    val nested: PreviewNestedItem,
+    val nestedList: List<PreviewNestedItem>,
 )
 
 @Serializable
-sealed interface BaseRequest
+sealed interface SampleRequest
 
 @Serializable
-data class RequestA(val id: Int) : BaseRequest
+data class SampleRequestA(val id: Int) : SampleRequest
 
 @Serializable
-data class RequestB(val s: String) : BaseRequest
+data class SampleRequestB(val payload: String) : SampleRequest
 
 @Serializable
-sealed interface BaseResponse
+sealed interface SampleResponse
 
 @Serializable
-data class ResponseC(val payload: Long) : BaseResponse
+data class SampleResponseC(val amount: Long) : SampleResponse
 
 @Serializable
-data class ResponseD(val payload: ByteArray) : BaseResponse
+data class SampleResponseD(val data: ByteArray) : SampleResponse
 
-@Keep
 @Serializable
-@HiltRemoteConfig("contentTutorialConfig_5243222")
-data class Message(
-    @Polymorphic val request: BaseRequest,
-    @Polymorphic val response: BaseResponse,
+@HiltRemoteConfig("sample_message_envelope")
+data class SampleMessageEnvelope(
+    @Polymorphic val request: SampleRequest,
+    @Polymorphic val response: SampleResponse,
 )
 
 @Serializable
-@HiltRemoteConfig("onBoardingPremiumChoice_64811")
-data class PremiumChoiceConfig(
-    @Polymorphic val value: PremiumChoiceVariant,
+@HiltRemoteConfig("sample_choice_config")
+data class SampleChoiceConfig(
+    @Polymorphic val value: SampleChoiceVariant,
 )
 
 @Serializable
-sealed interface PremiumChoiceVariant {
+sealed interface SampleChoiceVariant {
     val variant: String
     val experimentName: String
 
@@ -134,44 +128,44 @@ sealed interface PremiumChoiceVariant {
     data class Baseline(
         override val variant: String,
         override val experimentName: String,
-    ) : PremiumChoiceVariant
+    ) : SampleChoiceVariant
 
     @Serializable
     @SerialName("TestVariant")
     data class TestVariant(
         override val variant: String,
         override val experimentName: String,
-        val tier1: Tier,
-        val tier2: Tier,
-    ) : PremiumChoiceVariant
+        val tier1: SampleTier,
+        val tier2: SampleTier,
+    ) : SampleChoiceVariant
 }
 
 @Serializable
-data class Tier(
+data class SampleTier(
     val pretext: String,
     val title: String,
     val cta: String,
     val isFree: Boolean,
-    val image: PremiumChoiceImage,
-    val points: List<BulletPoint>,
+    val image: SampleChoiceImage,
+    val points: List<SampleBulletPoint>,
     val description: String,
 )
 
 @Serializable
-data class BulletPoint(
-    val icon: PremiumChoiceBulletIcon,
+data class SampleBulletPoint(
+    val icon: SampleChoiceBulletIcon,
     val title: String,
     val description: String,
 )
 
 @Serializable
-enum class PremiumChoiceImage {
+enum class SampleChoiceImage {
     @SerialName("CROWN")
     CROWN,
 }
 
 @Serializable
-enum class PremiumChoiceBulletIcon {
+enum class SampleChoiceBulletIcon {
     @SerialName("BELL")
     BELL,
 
@@ -182,31 +176,10 @@ enum class PremiumChoiceBulletIcon {
     ROCKET,
 }
 
-/**
- * Config for skip button in onboarding education
- */
-@Keep
 @Serializable
-enum class SkipMode(val skipStart: Boolean, val skipMiddle: Boolean) {
-    /**
-     * Users see an option to skip the tutorial only on the first page (button I know how it works). They cannot skip the tutorial once they start.
-     */
+enum class SkipBehavior(val skipStart: Boolean, val skipMiddle: Boolean) {
     SkippableStart(true, false),
-
-    /**
-     * Users don't see skip option on the first page (button I know how it works is not shown), they see skip option only after they start the tutorial.
-     */
     SkippableMiddle(false, true),
-
-    /**
-     * Users see an option to skip the tutorial on the first page (button I know how it works) and in the middle of the tutorial (button skip). This is also
-     * the default behaviour when the value for this key is empty.
-     */
     SkippableStartMiddle(true, true),
-
-    /**
-     * Skipping tutorial is not available anywhere, users are forced to complete the tutorial.
-     */
-    NotSkippable(false, false),
+    NotSkippable(false, false)
 }
-
