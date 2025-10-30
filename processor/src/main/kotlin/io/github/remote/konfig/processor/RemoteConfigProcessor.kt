@@ -251,7 +251,7 @@ private class EditorGenerator(
         code.unindent()
         code.add(")")
 
-        return function.addCode(code).build()
+        return function.addCode(code.build()).build()
     }
 
     private fun getterBlock(property: KSPropertyDeclaration): CodeBlock {
@@ -299,7 +299,7 @@ private class EditorGenerator(
         }
 
         if (declaration.modifiers.contains(Modifier.SEALED) || declaration.classKind == ClassKind.INTERFACE) {
-            val subclasses = declaration.findPolymorphicSubclasses()
+            val subclasses = declaration.findPolymorphicSubclasses().toList()
             if (subclasses.isNotEmpty()) {
                 return defaultValueForDeclaration(subclasses.first(), visited)
             }
@@ -414,14 +414,13 @@ private class EditorGenerator(
             ClassKind.ENUM_CLASS -> CodeBlock.of("%T.entries.first()", declaration.toClassName())
             ClassKind.CLASS -> defaultValueForDeclaration(declaration, visited)
             ClassKind.INTERFACE, ClassKind.OBJECT, ClassKind.ANNOTATION_CLASS -> {
-                val subclasses = declaration.findPolymorphicSubclasses()
+                val subclasses = declaration.findPolymorphicSubclasses().toList()
                 if (subclasses.isNotEmpty()) {
                     defaultValueForDeclaration(subclasses.first(), visited)
                 } else {
                     CodeBlock.of("error(%S)", "Cannot create default value for ${declaration.simpleName.asString()}")
                 }
             }
-            ClassKind.SEALED_CLASS -> defaultValueForDeclaration(declaration, visited)
             else -> CodeBlock.of("error(%S)", "Cannot create default value for ${declaration.simpleName.asString()}")
         }
     }
@@ -432,6 +431,7 @@ private class EditorGenerator(
             .mapNotNull { it.qualifiedName?.asString() }
             .distinct()
             .sorted()
+            .toList()
     }
 
     private fun KSClassDeclaration.findPolymorphicSubclasses(): Sequence<KSClassDeclaration> {
