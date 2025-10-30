@@ -20,7 +20,6 @@ androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayo
 kotlin-stdlib = { module = "org.jetbrains.kotlin:kotlin-stdlib", version.ref = "kotlin" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization-json" }
 ksp-api = { module = "com.google.devtools.ksp:symbol-processing-api", version.ref = "ksp" }
-ksp-testing = { module = "com.google.devtools.ksp:symbol-processing-testing", version.ref = "ksp" }
 kotlinpoet = { module = "com.squareup:kotlinpoet", version.ref = "kotlinpoet" }
 kotlinpoet-ksp = { module = "com.squareup:kotlinpoet-ksp", version.ref = "kotlinpoet" }
 kotlin-compile-testing-ksp = { module = "com.github.tschuchortdev:kotlin-compile-testing-ksp", version.ref = "kotlin-compile-testing" }
