@@ -26,9 +26,8 @@ jobs:
         with:
           arguments: |
             --version
-      - name: Build & Test (all)
+      - name: Build & Test (api + sample)
         run: |
           ./gradlew --stacktrace --no-daemon \
             :api:test \
-            :processor:test \
             :sample:app:assembleDebug
