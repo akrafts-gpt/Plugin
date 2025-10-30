@@ -91,6 +91,7 @@ private class RemoteConfigProcessor(
         }
 
         FileSpec.builder(packageName, moduleName)
+            .addImport("kotlinx.serialization", "decodeFromString")
             .addType(moduleType)
             .build()
             .writeTo(codeGenerator, dependencies)

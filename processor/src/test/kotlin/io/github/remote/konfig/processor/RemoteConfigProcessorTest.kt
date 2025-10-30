@@ -41,5 +41,6 @@ class RemoteConfigProcessorTest {
         val contents = generated.readText()
         assertTrue("@Module" in contents)
         assertTrue("\"x\"" in contents)
+        assertTrue("import kotlinx.serialization.decodeFromString" in contents)
     }
 }
