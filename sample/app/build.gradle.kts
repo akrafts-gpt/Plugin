@@ -1,6 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.kapt)
     alias(libs.plugins.hilt)
     id("io.github.remote.konfig")
@@ -37,13 +39,16 @@ android {
 }
 
 dependencies {
+    implementation(project(":api"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.activity.ktx)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.hilt.android)
     implementation(libs.material)
+    implementation(libs.kotlinx.serialization.json)
     kapt(libs.hilt.compiler)
+    ksp(project(":processor"))
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")
 }

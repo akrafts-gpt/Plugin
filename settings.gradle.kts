@@ -18,4 +18,5 @@ dependencyResolutionManagement {
 rootProject.name = "remote-konfig"
 
 include(":api")
+include(":processor")
 include(":sample:app")
