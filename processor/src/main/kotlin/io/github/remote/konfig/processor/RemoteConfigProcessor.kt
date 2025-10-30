@@ -2,10 +2,7 @@ package io.github.remote.konfig.processor
 
 import com.google.devtools.ksp.processing.CodeGenerator
 import com.google.devtools.ksp.processing.Dependencies
-import com.google.devtools.ksp.processing.Incremental
-import com.google.devtools.ksp.processing.IncrementalProcessorType
 import com.google.devtools.ksp.processing.KSPLogger
-import com.google.devtools.ksp.processing.KspExperimental
 import com.google.devtools.ksp.processing.SymbolProcessor
 import com.google.devtools.ksp.processing.SymbolProcessorEnvironment
 import com.google.devtools.ksp.processing.SymbolProcessorProvider
@@ -20,8 +17,6 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.ksp.toClassName
 
-@OptIn(KspExperimental::class)
-@Incremental(IncrementalProcessorType.AGGREGATING)
 class RemoteConfigProcessorProvider : SymbolProcessorProvider {
     override fun create(environment: SymbolProcessorEnvironment): SymbolProcessor {
         return RemoteConfigProcessor(environment)
@@ -87,12 +82,17 @@ private class RemoteConfigProcessor(
             )
             .build()
 
-        val sources = arrayOfNotNull(classDeclaration.containingFile)
+        val source = classDeclaration.containingFile
+        val dependencies = if (source != null) {
+            Dependencies(aggregating = true, source)
+        } else {
+            Dependencies(aggregating = true)
+        }
 
         FileSpec.builder(packageName, moduleName)
             .addType(moduleType)
             .build()
-            .writeTo(codeGenerator, Dependencies(true, *sources))
+            .writeTo(codeGenerator, dependencies)
     }
 
     override fun finish() = Unit
