@@ -23,6 +23,8 @@ tasks.withType<KotlinCompile>().configureEach {
 
 dependencies {
     implementation(gradleApi())
+    testImplementation(kotlin("test"))
+    testImplementation(kotlin("test-junit"))
 }
 
 gradlePlugin {
@@ -34,6 +36,10 @@ gradlePlugin {
             description = "Adds the remote-konfig API dependency to Android application modules."
         }
     }
+}
+
+tasks.test {
+    useJUnit()
 }
 
 publishing {

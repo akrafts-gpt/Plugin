@@ -22,6 +22,10 @@ android {
         viewBinding = true
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -40,6 +44,9 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.material)
     kapt(libs.hilt.compiler)
+
+    testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
 }
 
 kapt {
