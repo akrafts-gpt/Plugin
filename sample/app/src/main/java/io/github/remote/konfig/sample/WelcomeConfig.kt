@@ -5,4 +5,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 @HiltRemoteConfig("welcome")
-data class WelcomeConfig(val message: String)
+data class WelcomeConfig(
+    val text: String = "Hello",
+    val enabled: Boolean = true
+)

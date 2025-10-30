@@ -6,8 +6,11 @@ import kotlin.test.assertTrue
 
 class GeneratedModuleTest {
     @Test
-    fun generatedModuleExists() {
-        val generated = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/sample/WelcomeConfigRemoteConfigModule.kt")
-        assertTrue(generated.exists(), "Expected generated module at \${generated.path}")
+    fun generatedModuleAndEditorExist() {
+        val module = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/sample/WelcomeConfigRemoteConfigModule.kt")
+        val editor = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/generated/WelcomeConfigRemoteConfigEditor.kt")
+
+        assertTrue(module.exists(), "Expected generated module at ${module.path}")
+        assertTrue(editor.exists(), "Expected generated editor at ${editor.path}")
     }
 }

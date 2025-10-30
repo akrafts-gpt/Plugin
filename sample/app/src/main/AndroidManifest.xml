@@ -7,6 +7,9 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.RemoteKonfig">
         <activity
+            android:name=".ConfigEditorMenuActivity"
+            android:exported="false" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>

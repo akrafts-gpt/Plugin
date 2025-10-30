@@ -11,7 +11,7 @@ class FakeRemoteConfigProvider @Inject constructor(
 ) : RemoteConfigProvider {
 
     private val defaultConfigs: Map<String, String> = mapOf(
-        "welcome" to "{\"title\":\"Welcome\",\"message\":\"This message is served from the FakeRemoteConfigProvider.\"}"
+        "welcome" to "{\"text\":\"Hello\",\"enabled\":true}"
     )
 
     override fun getRemoteConfig(key: String): String? {
