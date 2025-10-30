@@ -14,6 +14,7 @@ dependencies {
     compileOnly(libs.ksp.api)
 
     testImplementation(kotlin("test"))
+    testImplementation(libs.kotlin.compile.testing)
     testImplementation(libs.ksp.api)
     testImplementation(libs.kotlin.compile.testing.ksp)
 }
