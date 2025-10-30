@@ -1,8 +1,8 @@
 package io.github.remote.konfig.sample
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,7 +22,7 @@ import io.github.remote.konfig.RemoteConfigScreen
 import javax.inject.Inject
 
 @AndroidEntryPoint
-class ConfigListActivity : ComponentActivity() {
+class ConfigListActivity : AppCompatActivity() {
 
     @Inject
     lateinit var screens: Set<@JvmSuppressWildcards RemoteConfigScreen>
