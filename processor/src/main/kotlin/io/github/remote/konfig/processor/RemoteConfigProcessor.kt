@@ -291,6 +291,7 @@ private class EditorGenerator(
             "kotlin.Double" -> return CodeBlock.of("0.0")
             "kotlin.Short" -> return CodeBlock.of("0")
             "kotlin.Byte" -> return CodeBlock.of("0")
+            "kotlin.ByteArray" -> return CodeBlock.of("byteArrayOf()")
         }
 
         if (declaration.classKind == ClassKind.ENUM_CLASS) {
@@ -352,6 +353,7 @@ private class EditorGenerator(
             "kotlin.Double" -> return CodeBlock.of("0.0")
             "kotlin.Short" -> return CodeBlock.of("0")
             "kotlin.Byte" -> return CodeBlock.of("0")
+            "kotlin.ByteArray" -> return CodeBlock.of("byteArrayOf()")
             "kotlin.collections.List" -> {
                 val elementType = type.arguments.firstOrNull()?.type?.resolve()?.toTypeName()
                 return if (elementType != null) {
