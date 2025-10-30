@@ -610,7 +610,6 @@ private class ScreenGenerator(
             .build()
 
         return TypeSpec.classBuilder(dialogType)
-            .addModifiers(KModifier.PRIVATE)
             .superclass(DIALOG_FRAGMENT)
             .addFunction(onCreateDialog)
             .addType(companion)
