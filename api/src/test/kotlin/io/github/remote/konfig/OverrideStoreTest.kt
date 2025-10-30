@@ -16,6 +16,12 @@ class OverrideStoreTest {
         store.remove("welcome")
         assertNull(store.get("welcome"))
 
+        store.setOverride("welcome", "value")
+        assertEquals("value", store.getOverride("welcome"))
+
+        store.clearOverride("welcome")
+        assertNull(store.get("welcome"))
+
         store.put("welcome", "value")
         store.clear()
         assertNull(store.get("welcome"))
