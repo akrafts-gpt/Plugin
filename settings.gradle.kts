@@ -3,6 +3,7 @@ pluginManagement {
     repositories {
         google()
         mavenCentral()
+        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev")
         gradlePluginPortal()
     }
 }
@@ -12,10 +13,12 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/dev")
     }
 }
 
 rootProject.name = "remote-konfig"
 
 include(":api")
+include(":processor")
 include(":sample:app")

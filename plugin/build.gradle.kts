@@ -1,3 +1,1 @@
-plugins {
-    kotlin("jvm") version "2.0.21" apply false
-}
+// No root-level plugins needed for the composite build.
