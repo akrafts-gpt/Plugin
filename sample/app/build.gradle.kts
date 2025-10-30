@@ -30,6 +30,10 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
 }
 
 dependencies {
@@ -40,6 +44,8 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.material)
     kapt(libs.hilt.compiler)
+    testImplementation(kotlin("test"))
+    testImplementation("junit:junit:4.13.2")
 }
 
 kapt {

@@ -23,6 +23,11 @@ tasks.withType<KotlinCompile>().configureEach {
 
 dependencies {
     implementation(gradleApi())
+    testImplementation(kotlin("test-junit"))
+}
+
+tasks.test {
+    useJUnit()
 }
 
 gradlePlugin {

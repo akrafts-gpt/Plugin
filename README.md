@@ -1,5 +1,7 @@
 # remote-konfig
 
+![CI](https://github.com/akrafts-gpt/Plugin/actions/workflows/build.yml/badge.svg)
+
 remote-konfig is a Gradle plugin and Android API bundle that wires a remote configuration provider into Android apps. The repository contains:
 
 - `plugin/` – a Gradle plugin that automatically adds the API dependency to Android application modules.
