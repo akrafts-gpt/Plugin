@@ -18,10 +18,10 @@ remote-konfig is a Gradle plugin and Android API bundle that wires a remote conf
 ./gradlew :sample:app:assembleDebug
 ```
 
-> **Note:** The project uses the Gradle 8.7 wrapper distribution. If you need to restore
+> **Note:** The project uses the Gradle 8.14.3 wrapper distribution. If you need to restore
 > `gradle/wrapper/gradle-wrapper.jar`, download
-> `https://services.gradle.org/distributions/gradle-8.7-bin.zip` and copy
-> `gradle-8.7/lib/gradle-wrapper.jar` into `gradle/wrapper/`.
+> `https://services.gradle.org/distributions/gradle-8.14.3-bin.zip` and copy
+> `gradle-8.14.3/lib/gradle-wrapper.jar` into `gradle/wrapper/`.
 
 ### Run the sample
 
