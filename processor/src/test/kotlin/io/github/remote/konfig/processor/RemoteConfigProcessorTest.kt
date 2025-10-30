@@ -54,6 +54,13 @@ private val STUB_SOURCES = listOf(
             val getter: (T) -> Any?,
             val setter: (T, Any?) -> T,
         )
+
+        abstract class RemoteConfigDialogFragment<T : Any> : androidx.fragment.app.DialogFragment() {
+            protected abstract val configKey: String
+            protected abstract val screenTitle: String
+            protected abstract val serializer: kotlinx.serialization.KSerializer<T>
+            protected abstract val editor: RemoteConfigEditor<T>
+        }
         """.trimIndent(),
     ),
     SourceFile.kotlin(
@@ -193,6 +200,15 @@ private val STUB_SOURCES = listOf(
         """.trimIndent(),
     ),
     SourceFile.kotlin(
+        "HiltAndroidEntryPointStub.kt",
+        """
+        package dagger.hilt.android
+
+        @Target(AnnotationTarget.CLASS)
+        annotation class AndroidEntryPoint
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
         "DaggerHiltComponentsStub.kt",
         """
         package dagger.hilt.components
@@ -225,6 +241,8 @@ private val STUB_SOURCES = listOf(
 
         @Target(AnnotationTarget.CLASS)
         annotation class Serializable
+
+        interface KSerializer<T>
         """.trimIndent(),
     ),
 )
