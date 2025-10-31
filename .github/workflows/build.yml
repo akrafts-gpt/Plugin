@@ -43,7 +43,11 @@ jobs:
           profile: pixel_5
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-front none -camera-back none
           emulator-timeout: 900
-          disable-animations: true
+          disable-animations: false
           script: |
             adb wait-for-device
+            adb shell settings put global window_animation_scale 0 || true
+            adb shell settings put global transition_animation_scale 0 || true
+            adb shell settings put global animator_duration_scale 0 || true
+            adb shell svc power stayon true || true
             ./gradlew --stacktrace --no-daemon :sample:app:connectedDebugAndroidTest
