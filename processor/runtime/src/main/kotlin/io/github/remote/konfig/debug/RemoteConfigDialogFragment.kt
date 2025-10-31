@@ -413,7 +413,7 @@ private fun <T : Any> RemoteConfigDialogContent(
                 }
             }
         }
-    )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
