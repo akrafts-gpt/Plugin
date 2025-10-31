@@ -14,7 +14,11 @@ import kotlin.test.assertTrue
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
-@Config(application = HiltTestApplication::class)
+@Config(
+    application = HiltTestApplication::class,
+    manifest = Config.NONE,
+    sdk = [34]
+)
 class AppSmokeTest {
 
     @get:Rule
