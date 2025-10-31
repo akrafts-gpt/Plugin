@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -16,18 +15,20 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.BorderStroke
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -79,9 +80,10 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
     protected abstract val editor: RemoteConfigEditor<T>
 
-    protected open val json: Json = Json {
+    protected open fun createJson(): Json = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
+        serializersModule = editor.serializersModule
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -100,7 +102,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
         val remoteJson = remoteConfigProvider.getRemoteConfig(configKey)
         val overrideJson = overrideStore.getOverride(configKey)
-
+        val dialogJson = createJson()
         val context = requireContext()
 
         return ComposeView(context).apply {
@@ -113,7 +115,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                         overrideJson = overrideJson,
                         editor = editor,
                         serializer = serializer,
-                        json = json,
+                        json = dialogJson,
                         onSave = { updatedJson ->
                             overrideStore.setOverride(configKey, updatedJson)
                             Toast.makeText(context, "Override saved", Toast.LENGTH_SHORT).show()
@@ -140,7 +142,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 }
 
 @Composable
-private fun <T : Any> RemoteConfigDialogContent(
+internal fun <T : Any> RemoteConfigDialogContent(
     title: String,
     configKey: String,
     remoteJson: String?,
@@ -194,10 +196,12 @@ private fun <T : Any> RemoteConfigDialogContent(
         fieldErrors.isEmpty()
     }
 
-    val sharePayload = if (showRawEditor) {
-        rawJson
-    } else {
-        json.encodeToString(serializer, currentState)
+    val sharePayload = remember(showRawEditor, rawJson, currentState) {
+        if (showRawEditor) {
+            rawJson
+        } else {
+            json.encodeToString(serializer, currentState)
+        }
     }
 
     val onSaveClick: () -> Unit = {
@@ -226,7 +230,7 @@ private fun <T : Any> RemoteConfigDialogContent(
             )
         },
         bottomBar = {
-            Surface {
+            Surface(tonalElevation = 3.dp) {
                 RemoteConfigDialogActionBar(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -235,169 +239,84 @@ private fun <T : Any> RemoteConfigDialogContent(
                         )
                         .padding(horizontal = 16.dp, vertical = 12.dp),
                     enabled = actionEnabled,
-                    onClose = onDismiss,
                     onShare = { onShare(sharePayload) },
                     onSave = onSaveClick
                 )
             }
         }
     ) { innerPadding ->
-        Box(
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                item("header") {
-                    Column(
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .fillMaxWidth()
-                    ) {
-                        Text(
-                            text = "Key: $configKey",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                        val overrideSource = overrideJson?.takeIf { it.isNotBlank() } != null
-                        Text(
-                            text = if (overrideSource) "Source: Override" else "Source: Remote",
-                            style = MaterialTheme.typography.labelMedium,
-                            modifier = Modifier.padding(top = 4.dp)
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        RemoteConfigModeToggle(
-                            showRaw = showRawEditor,
-                            canSwitchToForm = rawErrorMessage == null,
-                            onToggle = { shouldShowRaw ->
-                                if (shouldShowRaw) {
-                                    rawJson = json.encodeToString(serializer, currentState)
-                                    rawErrorMessage = null
-                                    showRawEditor = true
-                                } else {
-                                    runCatching { json.decodeFromString(serializer, rawJson) }
-                                        .onSuccess { decoded ->
-                                            currentState = decoded
-                                            pendingFieldValues.clear()
-                                            fieldErrors.clear()
-                                            rawErrorMessage = null
-                                            showRawEditor = false
-                                        }
-                                        .onFailure { throwable ->
-                                            rawErrorMessage = throwable.message
-                                        }
-                                }
-                            }
-                        )
-                    }
-                }
-
-                if (showRawEditor) {
-                    item("raw_editor") {
-                        RawJsonEditor(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .fillMaxWidth(),
-                            value = rawJson,
-                            errorMessage = rawErrorMessage,
-                            onValueChange = { newValue ->
-                                rawJson = newValue
-                                rawErrorMessage = runCatching {
-                                    json.decodeFromString(serializer, newValue)
-                                }.fold(
-                                    onSuccess = { null },
-                                    onFailure = { failure -> failure.message }
-                                )
-                            }
-                        )
-                    }
-
-                    rawJson.takeIf { it.isNotBlank() }?.let { activeJson ->
-                        item("raw_active_values") {
-                            Column(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                ReadOnlyField(label = "Active Value", value = activeJson)
-                                if (overrideJson?.isNotBlank() == true) {
-                                    Button(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors = ButtonDefaults.buttonColors(
-                                            containerColor = MaterialTheme.colorScheme.error
-                                        ),
-                                        onClick = onReset
-                                    ) {
-                                        Text("Remove Override")
+            item("header") {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Key: $configKey",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    val overrideSource = overrideJson?.takeIf { it.isNotBlank() } != null
+                    Text(
+                        text = if (overrideSource) "Source: Override" else "Source: Remote",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    RemoteConfigModeToggle(
+                        modifier = Modifier.fillMaxWidth(),
+                        showRaw = showRawEditor,
+                        canSwitchToForm = rawErrorMessage == null,
+                        onToggle = { shouldShowRaw ->
+                            if (shouldShowRaw) {
+                                rawJson = json.encodeToString(serializer, currentState)
+                                rawErrorMessage = null
+                                showRawEditor = true
+                            } else {
+                                runCatching { json.decodeFromString(serializer, rawJson) }
+                                    .onSuccess { decoded ->
+                                        currentState = decoded
+                                        pendingFieldValues.clear()
+                                        fieldErrors.clear()
+                                        rawErrorMessage = null
+                                        showRawEditor = false
                                     }
-                                }
+                                    .onFailure { throwable ->
+                                        rawErrorMessage = throwable.message
+                                    }
                             }
                         }
-                    }
-                } else {
-                    items(items = fields, key = { it.name }) { field ->
-                        when (field.type) {
-                            "kotlin.String" -> StringField(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                field = field,
-                                state = currentState,
-                                onStateChange = { updated -> currentState = updated }
-                            )
+                    )
+                }
+                Divider(modifier = Modifier.padding(top = 8.dp))
+            }
 
-                            "kotlin.Boolean" -> BooleanField(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                field = field,
-                                state = currentState,
-                                onStateChange = { updated -> currentState = updated }
-                            )
-
-                            "kotlin.Int", "kotlin.Long", "kotlin.Double", "kotlin.Float" -> NumericField(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                field = field,
-                                type = field.type,
-                                state = currentState,
-                                pendingValues = pendingFieldValues,
-                                fieldErrors = fieldErrors,
-                                onStateChange = { updated, error ->
-                                    if (error == null) {
-                                        currentState = updated
-                                    }
-                                }
-                            )
-
-                            else -> UnsupportedField(
-                                modifier = Modifier
-                                    .padding(horizontal = 16.dp)
-                                    .fillMaxWidth(),
-                                field = field
+            if (showRawEditor) {
+                item("raw_editor") {
+                    RawJsonEditor(
+                        modifier = Modifier.fillMaxWidth(),
+                        value = rawJson,
+                        errorMessage = rawErrorMessage,
+                        onValueChange = { newValue ->
+                            rawJson = newValue
+                            rawErrorMessage = runCatching {
+                                json.decodeFromString(serializer, newValue)
+                            }.fold(
+                                onSuccess = { null },
+                                onFailure = { failure -> failure.message }
                             )
                         }
-                    }
+                    )
                 }
 
-                if (!showRawEditor) {
-                    item("form_footer") {
-                        Column(
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            remoteJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                                ReadOnlyField(label = "Remote Value", value = payload)
-                            }
-                            overrideJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                                ReadOnlyField(label = "Override Value", value = payload)
+                rawJson.takeIf { it.isNotBlank() }?.let { activeJson ->
+                    item("raw_active_values") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ReadOnlyField(label = "Active Value", value = activeJson)
+                            if (overrideJson?.isNotBlank() == true) {
                                 Button(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = ButtonDefaults.buttonColors(
@@ -407,6 +326,65 @@ private fun <T : Any> RemoteConfigDialogContent(
                                 ) {
                                     Text("Remove Override")
                                 }
+                            }
+                        }
+                    }
+                }
+            } else {
+                items(items = fields, key = { it.name }) { field ->
+                    when (field.type) {
+                        "kotlin.String" -> StringField(
+                            modifier = Modifier.fillMaxWidth(),
+                            field = field,
+                            state = currentState,
+                            onStateChange = { updated -> currentState = updated }
+                        )
+
+                        "kotlin.Boolean" -> BooleanField(
+                            modifier = Modifier.fillMaxWidth(),
+                            field = field,
+                            state = currentState,
+                            onStateChange = { updated -> currentState = updated }
+                        )
+
+                        "kotlin.Int", "kotlin.Long", "kotlin.Double", "kotlin.Float" -> NumericField(
+                            modifier = Modifier.fillMaxWidth(),
+                            field = field,
+                            type = field.type,
+                            state = currentState,
+                            pendingValues = pendingFieldValues,
+                            fieldErrors = fieldErrors,
+                            onStateChange = { updated, error ->
+                                if (error == null) {
+                                    currentState = updated
+                                }
+                            }
+                        )
+
+                        else -> UnsupportedField(
+                            modifier = Modifier.fillMaxWidth(),
+                            field = field
+                        )
+                    }
+                }
+            }
+
+            if (!showRawEditor) {
+                item("form_footer") {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        remoteJson?.takeIf { it.isNotBlank() }?.let { payload ->
+                            ReadOnlyField(label = "Remote Value", value = payload)
+                        }
+                        overrideJson?.takeIf { it.isNotBlank() }?.let { payload ->
+                            ReadOnlyField(label = "Override Value", value = payload)
+                            Button(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error
+                                ),
+                                onClick = onReset
+                            ) {
+                                Text("Remove Override")
                             }
                         }
                     }
@@ -443,7 +421,6 @@ private fun RemoteConfigDialogTopBar(
 private fun RemoteConfigDialogActionBar(
     modifier: Modifier,
     enabled: Boolean,
-    onClose: () -> Unit,
     onShare: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -452,17 +429,14 @@ private fun RemoteConfigDialogActionBar(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        TextButton(onClick = onClose) {
-            Text("Close")
-        }
-        Spacer(modifier = Modifier.weight(1f))
         TextButton(
             onClick = onShare,
             enabled = enabled
         ) {
             Text("Share")
         }
-        Button(
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(
             onClick = onSave,
             enabled = enabled
         ) {
@@ -473,11 +447,13 @@ private fun RemoteConfigDialogActionBar(
 
 @Composable
 private fun RemoteConfigModeToggle(
+    modifier: Modifier = Modifier,
     showRaw: Boolean,
     canSwitchToForm: Boolean,
     onToggle: (Boolean) -> Unit,
 ) {
     OutlinedButton(
+        modifier = modifier,
         onClick = {
             if (showRaw) {
                 onToggle(false)
@@ -499,7 +475,7 @@ private fun RawJsonEditor(
     onValueChange: (String) -> Unit,
 ) {
     OutlinedTextField(
-        modifier = modifier.height(200.dp),
+        modifier = modifier.heightIn(min = 160.dp),
         value = value,
         onValueChange = onValueChange,
         label = { Text("Raw JSON") },
@@ -516,15 +492,24 @@ private fun ReadOnlyField(
     value: String,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelMedium)
-        OutlinedTextField(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp),
-            value = value,
-            onValueChange = {},
-            readOnly = true
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            tonalElevation = 1.dp
+        ) {
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(12.dp)
+            )
+        }
     }
 }
 
@@ -615,10 +600,17 @@ private fun UnsupportedField(
     modifier: Modifier,
     field: EditorField<*>,
 ) {
-    Box(modifier = modifier) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 1.dp
+    ) {
         Text(
             text = "Unsupported field type ${field.type}. Edit using JSON mode.",
-            style = MaterialTheme.typography.bodyMedium
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(12.dp)
         )
     }
 }

@@ -24,6 +24,7 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
+import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
@@ -176,16 +177,11 @@ private class EditorGenerator(
             .addFunction(defaultInstanceFun(modelTypeName))
             .addFunction(fieldsFun(modelTypeName))
 
-        val subclasses = polymorphicSubclasses(modelClass)
-        if (subclasses.isNotEmpty()) {
+        val polymorphicBindings = polymorphicBindings()
+        if (polymorphicBindings.isNotEmpty()) {
             builder.addProperty(
-                PropertySpec.builder(
-                    "polymorphicSubclasses",
-                    LIST.parameterizedBy(STRING)
-                )
-                    .addModifiers(KModifier.PRIVATE)
-                    .initializer(subclasses.joinToString(prefix = "listOf(", postfix = ")") { "\"$it\"" })
-                    .addKdoc("Detected subclasses for polymorphic config.")
+                PropertySpec.builder("serializersModule", SERIALIZERS_MODULE_CLASS, KModifier.OVERRIDE)
+                    .initializer(buildSerializersModuleInitializer(polymorphicBindings))
                     .build()
             )
         }
@@ -432,13 +428,58 @@ private class EditorGenerator(
         }
     }
 
-    private fun polymorphicSubclasses(declaration: KSClassDeclaration): List<String> {
-        if (!declaration.isPolymorphicRoot()) return emptyList()
-        return declaration.findPolymorphicSubclasses()
-            .mapNotNull { it.qualifiedName?.asString() }
-            .distinct()
-            .sorted()
-            .toList()
+    private fun polymorphicBindings(): LinkedHashMap<KSClassDeclaration, List<KSClassDeclaration>> {
+        val bindings = linkedMapOf<KSClassDeclaration, List<KSClassDeclaration>>()
+        modelClass.getAllProperties()
+            .filter { property ->
+                property.annotations.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) }
+            }
+            .forEach { property ->
+                val declaration = property.type.resolve().declaration as? KSClassDeclaration ?: return@forEach
+                if (!declaration.isPolymorphicRoot()) {
+                    logger.warn(
+                        "${property.simpleName.asString()} is marked @Polymorphic but ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} is not a polymorphic root.",
+                        property
+                    )
+                    return@forEach
+                }
+
+                val subclasses = declaration.findPolymorphicSubclasses()
+                    .distinctBy { it.qualifiedName?.asString() }
+                    .sortedBy { it.qualifiedName?.asString() ?: it.simpleName.asString() }
+                    .toList()
+
+                if (subclasses.isEmpty()) {
+                    logger.warn(
+                        "No subclasses found for polymorphic type ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} referenced from ${modelClass.qualifiedName?.asString() ?: modelClass.simpleName.asString()}.${property.simpleName.asString()}"
+                    )
+                    return@forEach
+                }
+
+                bindings.putIfAbsent(declaration, subclasses)
+            }
+
+        return bindings
+    }
+
+    private fun buildSerializersModuleInitializer(
+        bindings: Map<KSClassDeclaration, List<KSClassDeclaration>>
+    ): CodeBlock {
+        val block = CodeBlock.builder()
+        block.add("%M {\n", SERIALIZERS_MODULE_FUNCTION)
+        block.indent()
+        bindings.forEach { (root, subclasses) ->
+            block.add("%M(%T::class) {\n", POLYMORPHIC_FUNCTION, root.toClassName())
+            block.indent()
+            subclasses.forEach { subclass ->
+                block.add("%M(%T::class)\n", SUBCLASS_FUNCTION, subclass.toClassName())
+            }
+            block.unindent()
+            block.add("}\n")
+        }
+        block.unindent()
+        block.add("}")
+        return block.build()
     }
 
     private fun KSClassDeclaration.findPolymorphicSubclasses(): Sequence<KSClassDeclaration> {
@@ -631,6 +672,10 @@ private val REMOTE_CONFIG_SCREEN = ClassName("io.github.remote.konfig", "RemoteC
 private val FRAGMENT_MANAGER = ClassName("androidx.fragment.app", "FragmentManager")
 private val REMOTE_CONFIG_DIALOG_FRAGMENT = ClassName("io.github.remote.konfig.debug", "RemoteConfigDialogFragment")
 private val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
+private val SERIALIZERS_MODULE_CLASS = ClassName("kotlinx.serialization.modules", "SerializersModule")
+private val SERIALIZERS_MODULE_FUNCTION = MemberName("kotlinx.serialization.modules", "SerializersModule")
+private val POLYMORPHIC_FUNCTION = MemberName("kotlinx.serialization.modules", "polymorphic")
+private val SUBCLASS_FUNCTION = MemberName("kotlinx.serialization.modules", "subclass")
 private val ANDROID_ENTRY_POINT = ClassName("dagger.hilt.android", "AndroidEntryPoint")
 private val MODULE = ClassName("dagger", "Module")
 private val INSTALL_IN = ClassName("dagger.hilt", "InstallIn")
@@ -638,6 +683,7 @@ private val SINGLETON_COMPONENT = ClassName("dagger.hilt.components", "Singleton
 private val BINDS = ClassName("dagger", "Binds")
 private val INTO_SET = ClassName("dagger.multibindings", "IntoSet")
 private val INJECT = ClassName("javax.inject", "Inject")
+private const val POLYMORPHIC_ANNOTATION = "kotlinx.serialization.Polymorphic"
 private const val SERIALIZABLE_ANNOTATION = "kotlinx.serialization.Serializable"
 private const val HILT_REMOTE_CONFIG_FULL = "io.github.remote.konfig.HiltRemoteConfig"
 private const val HILT_REMOTE_CONFIG_SIMPLE = "HiltRemoteConfig"

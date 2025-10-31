@@ -214,6 +214,7 @@ private val STUB_SOURCES = listOf(
         package io.github.remote.konfig.debug
 
         import androidx.fragment.app.DialogFragment
+        import kotlinx.serialization.modules.SerializersModule
 
         abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment()
 
@@ -221,6 +222,7 @@ private val STUB_SOURCES = listOf(
             val key: String
             fun defaultInstance(): T
             fun fields(): List<EditorField<T>>
+            val serializersModule: SerializersModule
         }
 
         data class EditorField<T>(
@@ -229,6 +231,27 @@ private val STUB_SOURCES = listOf(
             val getter: (T) -> Any?,
             val setter: (T, Any?) -> T,
         )
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "SerializersModuleStub.kt",
+        """
+        package kotlinx.serialization.modules
+
+        class SerializersModule
+
+        class SerializersModuleBuilder
+
+        fun SerializersModule(block: SerializersModuleBuilder.() -> Unit): SerializersModule = SerializersModule()
+
+        class PolymorphicModuleBuilder<T : Any>
+
+        fun <T : Any> SerializersModuleBuilder.polymorphic(
+            baseClass: kotlin.reflect.KClass<T>,
+            block: PolymorphicModuleBuilder<T>.() -> Unit
+        ) { }
+
+        fun <T : Any> PolymorphicModuleBuilder<T>.subclass(subclass: kotlin.reflect.KClass<out T>) { }
         """.trimIndent(),
     ),
 )
