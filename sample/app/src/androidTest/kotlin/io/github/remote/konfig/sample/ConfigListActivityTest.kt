@@ -1,7 +1,6 @@
 package io.github.remote.konfig.sample
 
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.assertDoesNotExist
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -61,7 +60,9 @@ class ConfigListActivityTest {
         composeRule.onNodeWithText("Close").performClick()
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithText("Key: sample_choice_config").assertDoesNotExist()
+        composeRule
+            .onAllNodesWithText("Key: sample_choice_config")
+            .assertCountEquals(0)
     }
 
     private fun openSampleChoiceDialog(title: String) {
