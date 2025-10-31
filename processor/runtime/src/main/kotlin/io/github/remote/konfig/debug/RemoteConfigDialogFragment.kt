@@ -179,7 +179,7 @@ private fun <T : Any> RemoteConfigDialogContent(
     val pendingFieldValues = remember { mutableStateMapOf<String, String>() }
     val fieldErrors = remember { mutableStateMapOf<String, String>() }
 
-    val fields = remember(editor) { editor.fields() }
+    val fields: List<EditorField<T>> = remember(editor) { editor.fields() }
 
     val onRawValidated: (T) -> Unit = { decoded ->
         currentState = decoded
@@ -339,7 +339,7 @@ private fun <T : Any> RemoteConfigDialogContent(
                         }
                     }
                 } else {
-                    items(fields, key = { it.name }) { field ->
+                    items(items = fields, key = { it.name }) { field ->
                         when (field.type) {
                             "kotlin.String" -> StringField(
                                 modifier = Modifier

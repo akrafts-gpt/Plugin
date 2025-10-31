@@ -27,7 +27,7 @@ android {
     }
 
     composeOptions {
-        kotlinCompilerExtensionVersion = libs.versions.compose.compiler.get()
+        kotlinCompilerExtensionVersion = libs.versions["compose-compiler"].get()
     }
 }
 
@@ -42,4 +42,5 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.fragment)
     implementation(libs.kotlinx.serialization.json)
+    implementation("javax.inject:javax.inject:1")
 }
