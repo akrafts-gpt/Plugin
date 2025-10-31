@@ -24,7 +24,9 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LIST
+import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeName
@@ -70,6 +72,12 @@ private class RemoteConfigProcessor(
                     codeGenerator = codeGenerator,
                     resolver = resolver,
                     logger = logger
+                ).generate()
+
+                ScreenGenerator(
+                    modelClass = declaration,
+                    configKey = key,
+                    codeGenerator = codeGenerator,
                 ).generate()
             }
 
@@ -169,16 +177,11 @@ private class EditorGenerator(
             .addFunction(defaultInstanceFun(modelTypeName))
             .addFunction(fieldsFun(modelTypeName))
 
-        val subclasses = polymorphicSubclasses(modelClass)
-        if (subclasses.isNotEmpty()) {
+        val polymorphicBindings = polymorphicBindings()
+        if (polymorphicBindings.isNotEmpty()) {
             builder.addProperty(
-                PropertySpec.builder(
-                    "polymorphicSubclasses",
-                    LIST.parameterizedBy(STRING)
-                )
-                    .addModifiers(KModifier.PRIVATE)
-                    .initializer(subclasses.joinToString(prefix = "listOf(", postfix = ")") { "\"$it\"" })
-                    .addKdoc("Detected subclasses for polymorphic config.")
+                PropertySpec.builder("serializersModule", SERIALIZERS_MODULE_CLASS, KModifier.OVERRIDE)
+                    .initializer(buildSerializersModuleInitializer(polymorphicBindings))
                     .build()
             )
         }
@@ -425,13 +428,58 @@ private class EditorGenerator(
         }
     }
 
-    private fun polymorphicSubclasses(declaration: KSClassDeclaration): List<String> {
-        if (!declaration.isPolymorphicRoot()) return emptyList()
-        return declaration.findPolymorphicSubclasses()
-            .mapNotNull { it.qualifiedName?.asString() }
-            .distinct()
-            .sorted()
-            .toList()
+    private fun polymorphicBindings(): LinkedHashMap<KSClassDeclaration, List<KSClassDeclaration>> {
+        val bindings = linkedMapOf<KSClassDeclaration, List<KSClassDeclaration>>()
+        modelClass.getAllProperties()
+            .filter { property ->
+                property.annotations.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) }
+            }
+            .forEach { property ->
+                val declaration = property.type.resolve().declaration as? KSClassDeclaration ?: return@forEach
+                if (!declaration.isPolymorphicRoot()) {
+                    logger.warn(
+                        "${property.simpleName.asString()} is marked @Polymorphic but ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} is not a polymorphic root.",
+                        property
+                    )
+                    return@forEach
+                }
+
+                val subclasses = declaration.findPolymorphicSubclasses()
+                    .distinctBy { it.qualifiedName?.asString() }
+                    .sortedBy { it.qualifiedName?.asString() ?: it.simpleName.asString() }
+                    .toList()
+
+                if (subclasses.isEmpty()) {
+                    logger.warn(
+                        "No subclasses found for polymorphic type ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} referenced from ${modelClass.qualifiedName?.asString() ?: modelClass.simpleName.asString()}.${property.simpleName.asString()}"
+                    )
+                    return@forEach
+                }
+
+                bindings.putIfAbsent(declaration, subclasses)
+            }
+
+        return bindings
+    }
+
+    private fun buildSerializersModuleInitializer(
+        bindings: Map<KSClassDeclaration, List<KSClassDeclaration>>
+    ): CodeBlock {
+        val block = CodeBlock.builder()
+        block.add("%M {\n", SERIALIZERS_MODULE_FUNCTION)
+        block.indent()
+        bindings.forEach { (root, subclasses) ->
+            block.add("%M(%T::class) {\n", POLYMORPHIC_FUNCTION, root.toClassName())
+            block.indent()
+            subclasses.forEach { subclass ->
+                block.add("%M(%T::class)\n", SUBCLASS_FUNCTION, subclass.toClassName())
+            }
+            block.unindent()
+            block.add("}\n")
+        }
+        block.unindent()
+        block.add("}")
+        return block.build()
     }
 
     private fun KSClassDeclaration.findPolymorphicSubclasses(): Sequence<KSClassDeclaration> {
@@ -457,6 +505,125 @@ private class EditorGenerator(
             return annotations.any { it.matchesQualifiedName(SERIALIZABLE_ANNOTATION) }
         }
         return false
+    }
+}
+
+private class ScreenGenerator(
+    private val modelClass: KSClassDeclaration,
+    private val configKey: String,
+    private val codeGenerator: CodeGenerator,
+) {
+    fun generate() {
+        val screenSimpleName = "${modelClass.simpleName.asString()}RemoteConfigScreen"
+        val dialogSimpleName = "${screenSimpleName}DialogFragment"
+        val moduleSimpleName = "${screenSimpleName}Module"
+        val editorSimpleName = "${modelClass.simpleName.asString()}RemoteConfigEditor"
+
+        val screenType = ClassName(GENERATED_PACKAGE, screenSimpleName)
+        val dialogType = ClassName(GENERATED_PACKAGE, dialogSimpleName)
+        val moduleType = ClassName(GENERATED_PACKAGE, moduleSimpleName)
+        val editorType = ClassName(GENERATED_PACKAGE, editorSimpleName)
+        val modelTypeName = modelClass.toClassName()
+
+        val fileSpec = FileSpec.builder(GENERATED_PACKAGE, screenSimpleName)
+            .addType(buildScreenType(screenType, dialogType))
+            .addType(buildDialogType(dialogType, modelTypeName, editorType))
+            .addType(buildBindingModule(screenType, moduleType))
+            .build()
+
+        val source = modelClass.containingFile
+        val dependencies = if (source != null) {
+            Dependencies(aggregating = true, source)
+        } else {
+            Dependencies(aggregating = true)
+        }
+
+        fileSpec.writeTo(codeGenerator, dependencies)
+    }
+
+    private fun buildScreenType(screenType: ClassName, dialogType: ClassName): TypeSpec {
+        val constructor = FunSpec.constructorBuilder()
+            .addAnnotation(INJECT)
+            .build()
+
+        val dialogTag = "${configKey}_remote_config"
+
+        return TypeSpec.classBuilder(screenType)
+            .addSuperinterface(REMOTE_CONFIG_SCREEN)
+            .primaryConstructor(constructor)
+            .addProperty(
+                PropertySpec.builder("id", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", configKey)
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("title", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", "${modelClass.simpleName.asString()} for $configKey")
+                    .build(),
+            )
+            .addFunction(
+                FunSpec.builder("show")
+                    .addModifiers(KModifier.OVERRIDE)
+                    .addParameter("fragmentManager", FRAGMENT_MANAGER)
+                    .addStatement("%T().show(fragmentManager, %S)", dialogType, dialogTag)
+                    .build(),
+            )
+            .build()
+    }
+
+    private fun buildDialogType(
+        dialogType: ClassName,
+        modelTypeName: ClassName,
+        editorType: ClassName,
+    ): TypeSpec {
+        val serializerType = K_SERIALIZER.parameterizedBy(modelTypeName)
+        val editorInterface = REMOTE_CONFIG_EDITOR.parameterizedBy(modelTypeName)
+
+        return TypeSpec.classBuilder(dialogType)
+            .addAnnotation(ANDROID_ENTRY_POINT)
+            .superclass(REMOTE_CONFIG_DIALOG_FRAGMENT.parameterizedBy(modelTypeName))
+            .addProperty(
+                PropertySpec.builder("configKey", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", configKey)
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("screenTitle", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", "${modelClass.simpleName.asString()} for $configKey")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("serializer", serializerType, KModifier.OVERRIDE)
+                    .initializer("%T.serializer()", modelTypeName)
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("editor", editorInterface, KModifier.OVERRIDE)
+                    .initializer("%T()", editorType)
+                    .build(),
+            )
+            .build()
+    }
+
+    private fun buildBindingModule(screenType: ClassName, moduleType: ClassName): TypeSpec {
+        val bindFunName = "bind${screenType.simpleName}"
+        return TypeSpec.interfaceBuilder(moduleType)
+            .addAnnotation(MODULE)
+            .addAnnotation(
+                AnnotationSpec.builder(INSTALL_IN)
+                    .addMember("%T::class", SINGLETON_COMPONENT)
+                    .build(),
+            )
+            .addFunction(
+                FunSpec.builder(bindFunName)
+                    .addAnnotation(BINDS)
+                    .addAnnotation(INTO_SET)
+                    .addModifiers(KModifier.ABSTRACT)
+                    .addParameter("impl", screenType)
+                    .returns(REMOTE_CONFIG_SCREEN)
+                    .build(),
+            )
+            .build()
     }
 }
 
@@ -501,6 +668,22 @@ private const val GENERATED_PACKAGE = "io.github.remote.konfig.generated"
 private val STRING = String::class.asTypeName()
 private val REMOTE_CONFIG_EDITOR = ClassName("io.github.remote.konfig.debug", "RemoteConfigEditor")
 private val EDITOR_FIELD = ClassName("io.github.remote.konfig.debug", "EditorField")
+private val REMOTE_CONFIG_SCREEN = ClassName("io.github.remote.konfig", "RemoteConfigScreen")
+private val FRAGMENT_MANAGER = ClassName("androidx.fragment.app", "FragmentManager")
+private val REMOTE_CONFIG_DIALOG_FRAGMENT = ClassName("io.github.remote.konfig.debug", "RemoteConfigDialogFragment")
+private val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
+private val SERIALIZERS_MODULE_CLASS = ClassName("kotlinx.serialization.modules", "SerializersModule")
+private val SERIALIZERS_MODULE_FUNCTION = MemberName("kotlinx.serialization.modules", "SerializersModule")
+private val POLYMORPHIC_FUNCTION = MemberName("kotlinx.serialization.modules", "polymorphic")
+private val SUBCLASS_FUNCTION = MemberName("kotlinx.serialization.modules", "subclass")
+private val ANDROID_ENTRY_POINT = ClassName("dagger.hilt.android", "AndroidEntryPoint")
+private val MODULE = ClassName("dagger", "Module")
+private val INSTALL_IN = ClassName("dagger.hilt", "InstallIn")
+private val SINGLETON_COMPONENT = ClassName("dagger.hilt.components", "SingletonComponent")
+private val BINDS = ClassName("dagger", "Binds")
+private val INTO_SET = ClassName("dagger.multibindings", "IntoSet")
+private val INJECT = ClassName("javax.inject", "Inject")
+private const val POLYMORPHIC_ANNOTATION = "kotlinx.serialization.Polymorphic"
 private const val SERIALIZABLE_ANNOTATION = "kotlinx.serialization.Serializable"
 private const val HILT_REMOTE_CONFIG_FULL = "io.github.remote.konfig.HiltRemoteConfig"
 private const val HILT_REMOTE_CONFIG_SIMPLE = "HiltRemoteConfig"

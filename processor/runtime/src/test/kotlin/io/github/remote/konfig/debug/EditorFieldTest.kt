@@ -2,7 +2,7 @@ package io.github.remote.konfig.debug
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class EditorFieldTest {
     @Test
@@ -22,7 +22,7 @@ class EditorFieldTest {
         assertEquals("text", field.name)
         assertEquals("kotlin.String", field.type)
         assertEquals("Howdy", field.getter(updated))
-        assertSame(true, updated.enabled)
+        assertTrue(updated.enabled)
         // Ensure original instance was not mutated
         assertEquals("Hello", original.text)
     }

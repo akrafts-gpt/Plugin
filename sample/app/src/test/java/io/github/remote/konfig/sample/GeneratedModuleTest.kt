@@ -9,8 +9,10 @@ class GeneratedModuleTest {
     fun generatedModuleAndEditorExist() {
         val module = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/sample/WelcomeConfigRemoteConfigModule.kt")
         val editor = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/generated/WelcomeConfigRemoteConfigEditor.kt")
+        val screen = File("build/generated/ksp/debug/kotlin/io/github/remote/konfig/generated/WelcomeConfigRemoteConfigScreen.kt")
 
         assertTrue(module.exists(), "Expected generated module at ${module.path}")
         assertTrue(editor.exists(), "Expected generated editor at ${editor.path}")
+        assertTrue(screen.exists(), "Expected generated screen at ${screen.path}")
     }
 }
