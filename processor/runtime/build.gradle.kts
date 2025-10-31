@@ -44,6 +44,8 @@ dependencies {
     implementation(libs.kotlinx.serialization.json)
     implementation("javax.inject:javax.inject:1")
 
+    testImplementation(kotlin("test"))
+
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.ext.junit)
