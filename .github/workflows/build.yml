@@ -34,3 +34,14 @@ jobs:
             :processor:runtime:assembleDebug \
             :sample:app:assembleDebug \
             :sample:app:testDebugUnitTest
+      - name: UI Tests (sample)
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 33
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot
+          disable-animations: true
+          script: |
+            ./gradlew --stacktrace --no-daemon :sample:app:connectedDebugAndroidTest
