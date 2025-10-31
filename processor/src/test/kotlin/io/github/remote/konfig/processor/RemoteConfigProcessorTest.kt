@@ -38,32 +38,6 @@ private val STUB_SOURCES = listOf(
         """.trimIndent(),
     ),
     SourceFile.kotlin(
-        "EditorStubs.kt",
-        """
-        package io.github.remote.konfig.debug
-
-        interface RemoteConfigEditor<T> {
-            val key: String
-            fun defaultInstance(): T
-            fun fields(): List<EditorField<T>>
-        }
-
-        data class EditorField<T>(
-            val name: String,
-            val type: String,
-            val getter: (T) -> Any?,
-            val setter: (T, Any?) -> T,
-        )
-
-        abstract class RemoteConfigDialogFragment<T : Any> : androidx.fragment.app.DialogFragment() {
-            protected abstract val configKey: String
-            protected abstract val screenTitle: String
-            protected abstract val serializer: kotlinx.serialization.KSerializer<T>
-            protected abstract val editor: RemoteConfigEditor<T>
-        }
-        """.trimIndent(),
-    ),
-    SourceFile.kotlin(
         "AndroidOsBundleStub.kt",
         """
         package android.os
@@ -124,32 +98,6 @@ private val STUB_SOURCES = listOf(
             return bundle
         }
         """.trimIndent(),
-    ),
-    SourceFile.kotlin(
-        "AndroidxFragmentStubs.kt",
-        """
-        package androidx.fragment.app
-
-        import android.content.Context
-        import android.os.Bundle
-
-        open class FragmentManager
-
-        open class Fragment {
-            var arguments: Bundle? = null
-
-            fun requireArguments(): Bundle = arguments ?: Bundle().also { arguments = it }
-
-            fun requireContext(): Context = Context()
-        }
-
-        open class DialogFragment : Fragment() {
-            fun show(fragmentManager: FragmentManager, tag: String?) {
-                // no-op stub
-            }
-        }
-        """.trimIndent(),
-    ),
     SourceFile.kotlin(
         "AndroidxAppCompatAlertDialogStub.kt",
         """

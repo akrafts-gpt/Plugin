@@ -18,17 +18,20 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -40,6 +43,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.DialogFragment
@@ -198,12 +202,17 @@ private fun <T : Any> RemoteConfigDialogContent(
                 }
             )
         },
-        content = { _ ->
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+        content = { innerPadding ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
             ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
                 item("header") {
                     Column(
                         modifier = Modifier
@@ -368,6 +377,7 @@ private fun <T : Any> RemoteConfigDialogContent(
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun <T : Any> RemoteConfigDialogTopBar(
     title: String,
@@ -389,20 +399,35 @@ private fun <T : Any> RemoteConfigDialogTopBar(
         fieldErrors.isEmpty()
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+    TopAppBar(
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        navigationIcon = {
             TextButton(onClick = onDismiss) {
                 Text("Close")
             }
-            Text(text = title, style = MaterialTheme.typography.titleLarge)
+        },
+        actions = {
+            TextButton(
+                onClick = {
+                    val payload = if (showRawEditor) {
+                        rawJson
+                    } else {
+                        json.encodeToString(serializer, currentState)
+                    }
+                    onShare(payload)
+                },
+                enabled = actionEnabled
+            ) {
+                Text("Share")
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             Button(
                 onClick = {
                     if (showRawEditor) {
@@ -420,27 +445,7 @@ private fun <T : Any> RemoteConfigDialogTopBar(
                 Text("Save")
             }
         }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            OutlinedButton(
-                onClick = {
-                    val payload = if (showRawEditor) {
-                        rawJson
-                    } else {
-                        json.encodeToString(serializer, currentState)
-                    }
-                    onShare(payload)
-                },
-                enabled = actionEnabled
-            ) {
-                Text("Share")
-            }
-        }
-    }
+    )
 }
 
 @Composable
