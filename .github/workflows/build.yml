@@ -37,11 +37,13 @@ jobs:
       - name: UI Tests (sample)
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 33
+          api-level: 30
           target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot
+          arch: x86
+          profile: pixel_5
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-front none -camera-back none
+          emulator-timeout: 900
           disable-animations: true
           script: |
+            adb wait-for-device
             ./gradlew --stacktrace --no-daemon :sample:app:connectedDebugAndroidTest
