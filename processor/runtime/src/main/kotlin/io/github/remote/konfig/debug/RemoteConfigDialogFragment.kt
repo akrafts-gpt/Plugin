@@ -9,16 +9,20 @@ import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,6 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -176,43 +181,77 @@ private fun <T : Any> RemoteConfigDialogContent(
 
     val fields = remember(editor) { editor.fields() }
 
+    val onRawValidated: (T) -> Unit = { decoded ->
+        currentState = decoded
+        pendingFieldValues.clear()
+        fieldErrors.clear()
+        showRawEditor = false
+    }
+
+    val actionEnabled = if (showRawEditor) {
+        rawErrorMessage == null
+    } else {
+        fieldErrors.isEmpty()
+    }
+
+    val sharePayload = if (showRawEditor) {
+        rawJson
+    } else {
+        json.encodeToString(serializer, currentState)
+    }
+
+    val onSaveClick: () -> Unit = {
+        if (showRawEditor) {
+            runCatching { json.decodeFromString(serializer, rawJson) }
+                .onSuccess { decoded ->
+                    onRawValidated(decoded)
+                    onSave(rawJson)
+                }
+                .onFailure { throwable ->
+                    rawErrorMessage = throwable.message
+                }
+        } else {
+            onSave(json.encodeToString(serializer, currentState))
+        }
+    }
+
     Scaffold(
         modifier = Modifier
             .fillMaxSize()
-            .safeDrawingPadding()
             .imePadding(),
         topBar = {
             RemoteConfigDialogTopBar(
                 title = title,
-                showRawEditor = showRawEditor,
-                rawJson = rawJson,
-                rawErrorMessage = rawErrorMessage,
-                currentState = currentState,
-                fieldErrors = fieldErrors,
-                serializer = serializer,
-                json = json,
-                onSave = onSave,
-                onShare = onShare,
-                onDismiss = onDismiss,
-                onRawValidated = { decoded ->
-                    currentState = decoded
-                    pendingFieldValues.clear()
-                    fieldErrors.clear()
-                    showRawEditor = false
-                }
+                onDismiss = onDismiss
             )
         },
-        content = { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
+        bottomBar = {
+            Surface {
+                RemoteConfigDialogActionBar(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(
+                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
+                        )
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    enabled = actionEnabled,
+                    onClose = onDismiss,
+                    onShare = { onShare(sharePayload) },
+                    onSave = onSaveClick
+                )
+            }
+        }
+    ) { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
                 item("header") {
                     Column(
                         modifier = Modifier
@@ -379,26 +418,10 @@ private fun <T : Any> RemoteConfigDialogContent(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun <T : Any> RemoteConfigDialogTopBar(
+private fun RemoteConfigDialogTopBar(
     title: String,
-    showRawEditor: Boolean,
-    rawJson: String,
-    rawErrorMessage: String?,
-    currentState: T,
-    fieldErrors: Map<String, String>,
-    serializer: KSerializer<T>,
-    json: Json,
-    onSave: (String) -> Unit,
-    onShare: (String) -> Unit,
     onDismiss: () -> Unit,
-    onRawValidated: (T) -> Unit,
 ) {
-    val actionEnabled = if (showRawEditor) {
-        rawErrorMessage == null
-    } else {
-        fieldErrors.isEmpty()
-    }
-
     TopAppBar(
         title = {
             Text(
@@ -412,40 +435,40 @@ private fun <T : Any> RemoteConfigDialogTopBar(
             TextButton(onClick = onDismiss) {
                 Text("Close")
             }
-        },
-        actions = {
-            TextButton(
-                onClick = {
-                    val payload = if (showRawEditor) {
-                        rawJson
-                    } else {
-                        json.encodeToString(serializer, currentState)
-                    }
-                    onShare(payload)
-                },
-                enabled = actionEnabled
-            ) {
-                Text("Share")
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(
-                onClick = {
-                    if (showRawEditor) {
-                        runCatching { json.decodeFromString(serializer, rawJson) }
-                            .onSuccess { decoded ->
-                                onRawValidated(decoded)
-                                onSave(rawJson)
-                            }
-                    } else {
-                        onSave(json.encodeToString(serializer, currentState))
-                    }
-                },
-                enabled = actionEnabled
-            ) {
-                Text("Save")
-            }
         }
     )
+}
+
+@Composable
+private fun RemoteConfigDialogActionBar(
+    modifier: Modifier,
+    enabled: Boolean,
+    onClose: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        TextButton(onClick = onClose) {
+            Text("Close")
+        }
+        Spacer(modifier = Modifier.weight(1f))
+        TextButton(
+            onClick = onShare,
+            enabled = enabled
+        ) {
+            Text("Share")
+        }
+        Button(
+            onClick = onSave,
+            enabled = enabled
+        ) {
+            Text("Save")
+        }
+    }
 }
 
 @Composable

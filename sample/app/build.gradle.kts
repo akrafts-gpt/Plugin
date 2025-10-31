@@ -47,7 +47,7 @@ android {
 
 dependencies {
     implementation(project(":api"))
-    implementation(project(":processor"))
+    implementation(project(":processor:runtime"))
     implementation(platform(libs.compose.bom))
     implementation(libs.bundles.compose)
     implementation(libs.compose.activity)

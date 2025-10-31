@@ -98,6 +98,7 @@ private val STUB_SOURCES = listOf(
             return bundle
         }
         """.trimIndent(),
+    ),
     SourceFile.kotlin(
         "AndroidxAppCompatAlertDialogStub.kt",
         """
@@ -114,6 +115,20 @@ private val STUB_SOURCES = listOf(
             fun setPositiveButton(textId: Int, listener: Any?): Builder = this
             fun create(): AlertDialog = AlertDialog()
         }
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "AndroidxFragmentStub.kt",
+        """
+        package androidx.fragment.app
+
+        open class Fragment
+
+        open class DialogFragment : Fragment() {
+            fun show(manager: FragmentManager, tag: String?) = Unit
+        }
+
+        class FragmentManager
         """.trimIndent(),
     ),
     SourceFile.kotlin(
@@ -191,6 +206,29 @@ private val STUB_SOURCES = listOf(
         annotation class Serializable
 
         interface KSerializer<T>
+        """.trimIndent(),
+    ),
+    SourceFile.kotlin(
+        "RemoteConfigDialogStub.kt",
+        """
+        package io.github.remote.konfig.debug
+
+        import androidx.fragment.app.DialogFragment
+
+        abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment()
+
+        interface RemoteConfigEditor<T> {
+            val key: String
+            fun defaultInstance(): T
+            fun fields(): List<EditorField<T>>
+        }
+
+        data class EditorField<T>(
+            val name: String,
+            val type: String,
+            val getter: (T) -> Any?,
+            val setter: (T, Any?) -> T,
+        )
         """.trimIndent(),
     ),
 )

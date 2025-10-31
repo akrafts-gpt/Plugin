@@ -19,4 +19,5 @@ rootProject.name = "remote-konfig"
 
 include(":api")
 include(":processor")
+include(":processor:runtime")
 include(":sample:app")
