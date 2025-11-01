@@ -2,6 +2,7 @@ package io.github.remote.konfig.debug
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -59,6 +60,10 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
 import javax.inject.Inject
 
 /**
@@ -105,6 +110,8 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
         val dialogJson = createJson()
         val context = requireContext()
 
+        Log.d(TAG, "Rendering dialog for key=$configKey remotePresent=${remoteJson != null} overridePresent=${overrideJson != null}")
+
         return ComposeView(context).apply {
             setContent {
                 MaterialTheme(colorScheme = darkColorScheme()) {
@@ -117,11 +124,13 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                         serializer = serializer,
                         json = dialogJson,
                         onSave = { updatedJson ->
+                            Log.d(TAG, "Saving override for $configKey with payloadLength=${updatedJson.length}")
                             overrideStore.setOverride(configKey, updatedJson)
                             Toast.makeText(context, "Override saved", Toast.LENGTH_SHORT).show()
                             dismissAllowingStateLoss()
                         },
                         onShare = { payload ->
+                            Log.d(TAG, "Sharing payload for $configKey")
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, payload)
@@ -129,6 +138,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                             startActivity(Intent.createChooser(shareIntent, "Share config JSON"))
                         },
                         onReset = {
+                            Log.d(TAG, "Clearing override for $configKey")
                             overrideStore.clearOverride(configKey)
                             Toast.makeText(context, "Override cleared", Toast.LENGTH_SHORT).show()
                             dismissAllowingStateLoss()
@@ -188,6 +198,7 @@ internal fun <T : Any> RemoteConfigDialogContent(
         pendingFieldValues.clear()
         fieldErrors.clear()
         showRawEditor = false
+        Log.d(TAG, "Validated raw JSON for key=$configKey")
     }
 
     val actionEnabled = if (showRawEditor) {
@@ -213,8 +224,10 @@ internal fun <T : Any> RemoteConfigDialogContent(
                 }
                 .onFailure { throwable ->
                     rawErrorMessage = throwable.message
+                    Log.e(TAG, "Failed to save override for key=$configKey", throwable)
                 }
         } else {
+            Log.d(TAG, "Saving override from form for key=$configKey")
             onSave(json.encodeToString(serializer, currentState))
         }
     }
@@ -266,30 +279,33 @@ internal fun <T : Any> RemoteConfigDialogContent(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    RemoteConfigModeToggle(
-                        modifier = Modifier.fillMaxWidth(),
-                        showRaw = showRawEditor,
-                        canSwitchToForm = rawErrorMessage == null,
-                        onToggle = { shouldShowRaw ->
-                            if (shouldShowRaw) {
-                                rawJson = json.encodeToString(serializer, currentState)
-                                rawErrorMessage = null
-                                showRawEditor = true
-                            } else {
-                                runCatching { json.decodeFromString(serializer, rawJson) }
-                                    .onSuccess { decoded ->
-                                        currentState = decoded
-                                        pendingFieldValues.clear()
-                                        fieldErrors.clear()
-                                        rawErrorMessage = null
-                                        showRawEditor = false
-                                    }
-                                    .onFailure { throwable ->
-                                        rawErrorMessage = throwable.message
-                                    }
+                        RemoteConfigModeToggle(
+                            modifier = Modifier.fillMaxWidth(),
+                            showRaw = showRawEditor,
+                            canSwitchToForm = rawErrorMessage == null,
+                            onToggle = { shouldShowRaw ->
+                                if (shouldShowRaw) {
+                                    Log.d(TAG, "Switching key=$configKey to raw JSON editor")
+                                    rawJson = json.encodeToString(serializer, currentState)
+                                    rawErrorMessage = null
+                                    showRawEditor = true
+                                } else {
+                                    runCatching { json.decodeFromString(serializer, rawJson) }
+                                        .onSuccess { decoded ->
+                                            currentState = decoded
+                                            pendingFieldValues.clear()
+                                            fieldErrors.clear()
+                                            rawErrorMessage = null
+                                            showRawEditor = false
+                                            Log.d(TAG, "Switching key=$configKey to form editor")
+                                        }
+                                        .onFailure { throwable ->
+                                            rawErrorMessage = throwable.message
+                                            Log.e(TAG, "Failed to parse JSON while switching to form for key=$configKey", throwable)
+                                        }
+                                }
                             }
-                        }
-                    )
+                        )
                 }
                 Divider(modifier = Modifier.padding(top = 8.dp))
             }
@@ -363,7 +379,10 @@ internal fun <T : Any> RemoteConfigDialogContent(
 
                         else -> UnsupportedField(
                             modifier = Modifier.fillMaxWidth(),
-                            field = field
+                            field = field,
+                            state = currentState,
+                            serializer = serializer,
+                            json = json
                         )
                     }
                 }
@@ -436,7 +455,7 @@ private fun RemoteConfigDialogActionBar(
             Text("Share")
         }
         Spacer(modifier = Modifier.weight(1f))
-        TextButton(
+        Button(
             onClick = onSave,
             enabled = enabled
         ) {
@@ -507,7 +526,9 @@ private fun ReadOnlyField(
                 text = value,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(12.dp)
+                modifier = Modifier.padding(12.dp),
+                softWrap = true,
+                overflow = TextOverflow.Clip
             )
         }
     }
@@ -596,21 +617,81 @@ private fun <T : Any> NumericField(
 }
 
 @Composable
-private fun UnsupportedField(
+private fun <T : Any> UnsupportedField(
     modifier: Modifier,
-    field: EditorField<*>,
+    field: EditorField<T>,
+    state: T,
+    serializer: KSerializer<T>,
+    json: Json,
 ) {
+    val preview = remember(field.name, state, json, serializer) {
+        buildFieldJsonPreview(field.name, state, serializer, json)
+    }
+
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         tonalElevation = 1.dp
     ) {
-        Text(
-            text = "Unsupported field type ${field.type}. Edit using JSON mode.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp)
-        )
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Unsupported field type ${field.type}. Edit using JSON mode.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            preview?.let { payload ->
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Current Value",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        tonalElevation = 0.dp
+                    ) {
+                        Text(
+                            text = payload,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.padding(8.dp),
+                            softWrap = true,
+                            overflow = TextOverflow.Clip
+                        )
+                    }
+                }
+            }
+        }
     }
 }
+
+internal fun <T : Any> buildFieldJsonPreview(
+    fieldName: String,
+    state: T,
+    serializer: KSerializer<T>,
+    json: Json,
+): String? {
+    val encoded = runCatching { json.encodeToJsonElement(serializer, state) }
+        .getOrNull()
+        ?: return null
+
+    val element = when (encoded) {
+        is JsonObject -> encoded[fieldName]
+        else -> null
+    } ?: return null
+
+    return runCatching {
+        if (element is JsonPrimitive && element.isString) {
+            element.content
+        } else {
+            json.encodeToString(JsonElement.serializer(), element)
+        }
+    }.getOrNull()
+}
+
+private const val TAG = "RemoteConfigDialog"
