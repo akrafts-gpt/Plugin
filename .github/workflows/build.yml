@@ -34,3 +34,5 @@ jobs:
             :processor:runtime:assembleDebug \
             :sample:app:assembleDebug \
             :sample:app:testDebugUnitTest
+      - name: UI Tests (sample)
+        run: .github/scripts/run-android-ui-tests.sh
