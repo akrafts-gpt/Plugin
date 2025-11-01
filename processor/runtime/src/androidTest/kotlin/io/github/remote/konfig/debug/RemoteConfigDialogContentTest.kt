@@ -80,6 +80,7 @@ class RemoteConfigDialogContentTest {
                     onSave = { savedJson = it },
                     onShare = { sharedJson = it },
                     onReset = {},
+                    logTag = "RemoteConfigDialogTest",
                     onDismiss = {}
                 )
             }
@@ -89,8 +90,10 @@ class RemoteConfigDialogContentTest {
         composeRule.onAllNodesWithText("Close").assertCountEquals(1)
         composeRule.onAllNodesWithText("Share").assertCountEquals(1)
         composeRule.onAllNodesWithText("Save").assertCountEquals(1)
-        composeRule.onNodeWithText("Unsupported field type io.github.remote.konfig.sample.SampleOption. Edit using JSON mode.")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Value unavailable").assertIsDisplayed()
+        composeRule.onNodeWithText(
+            "Editing io.github.remote.konfig.sample.SampleOption is not supported in form mode. Use JSON mode for changes."
+        ).assertIsDisplayed()
 
         composeRule.onNodeWithText("View as JSON").performClick()
         composeRule.onNodeWithText("View as Form").assertIsDisplayed()
