@@ -6,38 +6,42 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import android.util.Log
+import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,7 +52,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -59,7 +65,17 @@ import kotlinx.serialization.KSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.parseToJsonElement
 import javax.inject.Inject
+
+
+private const val LOG_TAG = "RemoteConfigDialog"
 
 /**
  * Base dialog fragment that renders a Compose-powered editor for a remote config entry.
@@ -105,6 +121,11 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
         val dialogJson = createJson()
         val context = requireContext()
 
+        Log.d(
+            LOG_TAG,
+            "Opening editor for key=$configKey remoteLoaded=${remoteJson != null} overrideLoaded=${overrideJson != null}"
+        )
+
         return ComposeView(context).apply {
             setContent {
                 MaterialTheme(colorScheme = darkColorScheme()) {
@@ -117,11 +138,13 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                         serializer = serializer,
                         json = dialogJson,
                         onSave = { updatedJson ->
+                            Log.d(LOG_TAG, "Persisting override for key=$configKey")
                             overrideStore.setOverride(configKey, updatedJson)
                             Toast.makeText(context, "Override saved", Toast.LENGTH_SHORT).show()
                             dismissAllowingStateLoss()
                         },
                         onShare = { payload ->
+                            Log.d(LOG_TAG, "Sharing payload for key=$configKey (${payload.length} chars)")
                             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                                 type = "text/plain"
                                 putExtra(Intent.EXTRA_TEXT, payload)
@@ -129,6 +152,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                             startActivity(Intent.createChooser(shareIntent, "Share config JSON"))
                         },
                         onReset = {
+                            Log.d(LOG_TAG, "Clearing override for key=$configKey")
                             overrideStore.clearOverride(configKey)
                             Toast.makeText(context, "Override cleared", Toast.LENGTH_SHORT).show()
                             dismissAllowingStateLoss()
@@ -156,8 +180,11 @@ internal fun <T : Any> RemoteConfigDialogContent(
     onDismiss: () -> Unit,
 ) {
     val defaultState = remember(editor) { editor.defaultInstance() }
-    val initialJson = overrideJson?.takeIf { it.isNotBlank() }
-        ?: remoteJson?.takeIf { it.isNotBlank() }
+    val sanitizedRemoteJson = remoteJson?.takeIf { it.isNotBlank() }
+    var activeOverrideJson by remember(overrideJson) {
+        mutableStateOf(overrideJson?.takeIf { it.isNotBlank() })
+    }
+    val initialJson = activeOverrideJson ?: sanitizedRemoteJson
     val (startingState, initialError) = remember(initialJson, json, serializer) {
         if (initialJson == null) {
             defaultState to null
@@ -165,7 +192,10 @@ internal fun <T : Any> RemoteConfigDialogContent(
             runCatching { json.decodeFromString(serializer, initialJson) }
                 .fold(
                     onSuccess = { it to null },
-                    onFailure = { defaultState to it }
+                    onFailure = {
+                        Log.e(LOG_TAG, "Failed to decode initial JSON for $configKey", it)
+                        defaultState to it
+                    }
                 )
         }
     }
@@ -183,11 +213,26 @@ internal fun <T : Any> RemoteConfigDialogContent(
 
     val fields: List<EditorField<T>> = remember(editor) { editor.fields() }
 
+    val remoteElement = remember(sanitizedRemoteJson) {
+        sanitizedRemoteJson?.let { payload ->
+            runCatching { json.parseToJsonElement(payload) }.getOrNull()
+        }
+    }
+    val overrideElement = remember(activeOverrideJson) {
+        activeOverrideJson?.let { payload ->
+            runCatching { json.parseToJsonElement(payload) }.getOrNull()
+        }
+    }
+    val currentSnapshot = remember(currentState, showRawEditor) {
+        runCatching { json.encodeToJsonElement(serializer, currentState) }.getOrNull()
+    }
+
     val onRawValidated: (T) -> Unit = { decoded ->
         currentState = decoded
         pendingFieldValues.clear()
         fieldErrors.clear()
         showRawEditor = false
+        Log.d(LOG_TAG, "Validated raw JSON for $configKey")
     }
 
     val actionEnabled = if (showRawEditor) {
@@ -209,92 +254,87 @@ internal fun <T : Any> RemoteConfigDialogContent(
             runCatching { json.decodeFromString(serializer, rawJson) }
                 .onSuccess { decoded ->
                     onRawValidated(decoded)
+                    activeOverrideJson = rawJson
                     onSave(rawJson)
+                    Log.d(LOG_TAG, "Saved override from raw editor for $configKey")
                 }
                 .onFailure { throwable ->
                     rawErrorMessage = throwable.message
+                    Log.e(LOG_TAG, "Failed to save raw JSON for $configKey", throwable)
                 }
         } else {
-            onSave(json.encodeToString(serializer, currentState))
+            val updatedJson = json.encodeToString(serializer, currentState)
+            activeOverrideJson = updatedJson
+            rawJson = updatedJson
+            onSave(updatedJson)
+            Log.d(LOG_TAG, "Saved override from form editor for $configKey")
         }
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding(),
-        topBar = {
-            RemoteConfigDialogTopBar(
-                title = title,
-                onDismiss = onDismiss
-            )
-        },
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                RemoteConfigDialogActionBar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    enabled = actionEnabled,
-                    onShare = { onShare(sharePayload) },
-                    onSave = onSaveClick
-                )
-            }
-        }
-    ) { innerPadding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            item("header") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Key: $configKey",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val overrideSource = overrideJson?.takeIf { it.isNotBlank() } != null
-                    Text(
-                        text = if (overrideSource) "Source: Override" else "Source: Remote",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    RemoteConfigModeToggle(
-                        modifier = Modifier.fillMaxWidth(),
-                        showRaw = showRawEditor,
-                        canSwitchToForm = rawErrorMessage == null,
-                        onToggle = { shouldShowRaw ->
-                            if (shouldShowRaw) {
-                                rawJson = json.encodeToString(serializer, currentState)
-                                rawErrorMessage = null
-                                showRawEditor = true
-                            } else {
-                                runCatching { json.decodeFromString(serializer, rawJson) }
-                                    .onSuccess { decoded ->
-                                        currentState = decoded
-                                        pendingFieldValues.clear()
-                                        fieldErrors.clear()
-                                        rawErrorMessage = null
-                                        showRawEditor = false
-                                    }
-                                    .onFailure { throwable ->
-                                        rawErrorMessage = throwable.message
-                                    }
-                            }
-                        }
-                    )
-                }
-                Divider(modifier = Modifier.padding(top = 8.dp))
-            }
+    val handleReset: () -> Unit = {
+        activeOverrideJson = null
+        rawJson = sanitizedRemoteJson ?: json.encodeToString(serializer, defaultState)
+        onReset()
+        Log.d(LOG_TAG, "Override cleared from dialog for $configKey")
+    }
 
-            if (showRawEditor) {
+    EditorLayout(
+        title = title,
+        actionEnabled = actionEnabled,
+        onDismiss = onDismiss,
+        onShare = { onShare(sharePayload) },
+        onSave = onSaveClick,
+        headerContent = {
+            Text(
+                modifier = Modifier.testTag("config_key"),
+                text = "Key: $configKey",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            val hasOverride = activeOverrideJson != null
+            Text(
+                modifier = Modifier.testTag("config_source"),
+                text = if (hasOverride) "Source: Override" else "Source: Remote",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            RemoteConfigModeToggle(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("raw_json_toggle_button"),
+                showRaw = showRawEditor,
+                canSwitchToForm = rawErrorMessage == null,
+                onToggle = { shouldShowRaw ->
+                    if (shouldShowRaw) {
+                        rawJson = json.encodeToString(serializer, currentState)
+                        rawErrorMessage = null
+                        showRawEditor = true
+                        Log.d(LOG_TAG, "Switched to raw editor for $configKey")
+                    } else {
+                        runCatching { json.decodeFromString(serializer, rawJson) }
+                            .onSuccess { decoded ->
+                                currentState = decoded
+                                pendingFieldValues.clear()
+                                fieldErrors.clear()
+                                rawErrorMessage = null
+                                showRawEditor = false
+                                Log.d(LOG_TAG, "Switched to form editor for $configKey")
+                            }
+                            .onFailure { throwable ->
+                                rawErrorMessage = throwable.message
+                                Log.e(LOG_TAG, "Failed to parse JSON while toggling editor for $configKey", throwable)
+                            }
+                    }
+                }
+            )
+        }
+    ) {
+        if (showRawEditor) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
                 item("raw_editor") {
                     RawJsonEditor(
                         modifier = Modifier.fillMaxWidth(),
@@ -315,14 +355,21 @@ internal fun <T : Any> RemoteConfigDialogContent(
                 rawJson.takeIf { it.isNotBlank() }?.let { activeJson ->
                     item("raw_active_values") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ReadOnlyField(label = "Active Value", value = activeJson)
-                            if (overrideJson?.isNotBlank() == true) {
+                            ReadOnlyField(
+                                modifier = Modifier.testTag("active_value"),
+                                label = "Active Value",
+                                value = activeJson,
+                                jsonElement = runCatching { json.parseToJsonElement(activeJson) }.getOrNull()
+                            )
+                            if (activeOverrideJson != null) {
                                 Button(
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("reset_to_remote_button"),
                                     colors = ButtonDefaults.buttonColors(
                                         containerColor = MaterialTheme.colorScheme.error
                                     ),
-                                    onClick = onReset
+                                    onClick = handleReset
                                 ) {
                                     Text("Remove Override")
                                 }
@@ -330,7 +377,13 @@ internal fun <T : Any> RemoteConfigDialogContent(
                         }
                     }
                 }
-            } else {
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
                 items(items = fields, key = { it.name }) { field ->
                     when (field.type) {
                         "kotlin.String" -> StringField(
@@ -361,28 +414,40 @@ internal fun <T : Any> RemoteConfigDialogContent(
                             }
                         )
 
-                        else -> UnsupportedField(
+                        else -> ComplexField(
                             modifier = Modifier.fillMaxWidth(),
-                            field = field
+                            field = field,
+                            state = currentState,
+                            element = currentSnapshot?.jsonObject?.get(field.name)
                         )
                     }
                 }
-            }
 
-            if (!showRawEditor) {
                 item("form_footer") {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        remoteJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                            ReadOnlyField(label = "Remote Value", value = payload)
+                        sanitizedRemoteJson?.let { payload ->
+                            ReadOnlyField(
+                                modifier = Modifier.testTag("remote_value"),
+                                label = "Remote Value",
+                                value = payload,
+                                jsonElement = remoteElement
+                            )
                         }
-                        overrideJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                            ReadOnlyField(label = "Override Value", value = payload)
+                        activeOverrideJson?.let { payload ->
+                            ReadOnlyField(
+                                modifier = Modifier.testTag("override_value"),
+                                label = "Override Value",
+                                value = payload,
+                                jsonElement = overrideElement
+                            )
                             Button(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("reset_to_remote_button"),
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = MaterialTheme.colorScheme.error
                                 ),
-                                onClick = onReset
+                                onClick = handleReset
                             ) {
                                 Text("Remove Override")
                             }
@@ -393,54 +458,76 @@ internal fun <T : Any> RemoteConfigDialogContent(
         }
     }
 }
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RemoteConfigDialogTopBar(
+private fun EditorLayout(
     title: String,
+    actionEnabled: Boolean,
     onDismiss: () -> Unit,
-) {
-    TopAppBar(
-        title = {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        navigationIcon = {
-            TextButton(onClick = onDismiss) {
-                Text("Close")
-            }
-        }
-    )
-}
-
-@Composable
-private fun RemoteConfigDialogActionBar(
-    modifier: Modifier,
-    enabled: Boolean,
     onShare: () -> Unit,
     onSave: () -> Unit,
+    headerContent: @Composable ColumnScope.() -> Unit,
+    content: @Composable () -> Unit,
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .safeDrawingPadding()
+            .imePadding()
     ) {
-        TextButton(
-            onClick = onShare,
-            enabled = enabled
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Text("Share")
+            TextButton(
+                modifier = Modifier.testTag("cancel_button"),
+                onClick = onDismiss
+            ) {
+                Text("Cancel")
+            }
+            Text(
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("title"),
+                text = title,
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.titleLarge
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(
+                    modifier = Modifier.testTag("share_button"),
+                    onClick = onShare,
+                    enabled = actionEnabled
+                ) {
+                    Text("Share")
+                }
+                Button(
+                    modifier = Modifier.testTag("save_button"),
+                    onClick = onSave,
+                    enabled = actionEnabled
+                ) {
+                    Text("Save")
+                }
+            }
         }
-        Spacer(modifier = Modifier.weight(1f))
-        TextButton(
-            onClick = onSave,
-            enabled = enabled
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Text("Save")
+            headerContent()
+        }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+        ) {
+            content()
         }
     }
 }
@@ -488,10 +575,15 @@ private fun RawJsonEditor(
 
 @Composable
 private fun ReadOnlyField(
+    modifier: Modifier = Modifier,
     label: String,
     value: String,
+    jsonElement: JsonElement? = null,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
         Text(
             text = label,
             style = MaterialTheme.typography.labelMedium,
@@ -503,12 +595,23 @@ private fun ReadOnlyField(
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
             tonalElevation = 1.dp
         ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(12.dp)
-            )
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (jsonElement != null) {
+                    JsonTree(element = jsonElement)
+                } else {
+                    Text(
+                        text = value,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        softWrap = true,
+                        overflow = TextOverflow.Visible,
+                        maxLines = Int.MAX_VALUE
+                    )
+                }
+            }
         }
     }
 }
@@ -596,21 +699,125 @@ private fun <T : Any> NumericField(
 }
 
 @Composable
-private fun UnsupportedField(
+private fun <T : Any> ComplexField(
     modifier: Modifier,
-    field: EditorField<*>,
+    field: EditorField<T>,
+    state: T,
+    element: JsonElement?,
 ) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
+    val summary = remember(field, state) {
+        field.getter(state)?.toString() ?: "—"
+    }
+    var expanded by remember(field.name) { mutableStateOf(true) }
+    Column(
+        modifier = modifier
+            .border(
+                width = 1.dp,
+                color = MaterialTheme.colorScheme.outlineVariant,
+                shape = RoundedCornerShape(12.dp)
+            )
+            .animateContentSize()
+            .padding(12.dp)
     ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded },
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                modifier = Modifier.weight(1f),
+                text = field.name,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Text(
-            text = "Unsupported field type ${field.type}. Edit using JSON mode.",
-            style = MaterialTheme.typography.bodyMedium,
+            text = "Type: ${field.type}",
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp)
+            modifier = Modifier.padding(top = 4.dp)
         )
+        if (expanded) {
+            Spacer(modifier = Modifier.height(8.dp))
+            if (element != null) {
+                JsonTree(element = element)
+            } else {
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun JsonTree(
+    element: JsonElement,
+    depth: Int = 0,
+) {
+    val startPadding = (depth * 12).dp
+    when (element) {
+        is JsonObject -> {
+            element.entries.sortedBy { it.key }.forEach { (key, value) ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = startPadding, top = 4.dp)
+                ) {
+                    Text(
+                        text = key,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    JsonTree(element = value, depth = depth + 1)
+                }
+            }
+        }
+        is JsonArray -> {
+            element.forEachIndexed { index, value ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = startPadding, top = 4.dp)
+                ) {
+                    Text(
+                        text = "[$index]",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    JsonTree(element = value, depth = depth + 1)
+                }
+            }
+        }
+        is JsonPrimitive -> {
+            val content = if (element.isString) \"${element.content}\" else element.content
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = startPadding, top = 4.dp),
+                text = content,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        JsonNull -> {
+            Text(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = startPadding, top = 4.dp),
+                text = "null",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
