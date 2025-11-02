@@ -3,12 +3,11 @@ package io.github.remote.konfig.debug
 import androidx.activity.ComponentActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNode
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -87,9 +86,9 @@ class RemoteConfigDialogContentTest {
         }
 
         composeRule.onNodeWithText("Key: sample_config").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Close").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Share").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Save").assertCountEquals(1)
+        composeRule.onNodeWithTag("cancel_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("share_button").assertIsDisplayed()
+        composeRule.onNodeWithTag("save_button").assertIsDisplayed()
         composeRule.onNodeWithText("Type: io.github.remote.konfig.sample.SampleOption", substring = true)
             .assertIsDisplayed()
 
@@ -98,8 +97,8 @@ class RemoteConfigDialogContentTest {
 
         val updated = json.encodeToString(SampleConfig.serializer(), SampleConfig("Updated", true, 42))
         composeRule.onNode(hasSetTextAction()).performTextReplacement(updated)
-        composeRule.onNodeWithText("Share").performClick()
-        composeRule.onNodeWithText("Save").performClick()
+        composeRule.onNodeWithTag("share_button").performClick()
+        composeRule.onNodeWithTag("save_button").performClick()
 
         composeRule.waitUntil { sharedJson != null }
         composeRule.waitUntil { savedJson != null }
@@ -158,10 +157,12 @@ class RemoteConfigDialogContentTest {
         }
 
         composeRule.onNodeWithText("child").assertIsDisplayed()
-        composeRule.onNodeWithText("NestedChild(message=Nested detail, flag=true)", substring = true)
-            .assertIsDisplayed()
         composeRule.onNodeWithText("Type: ${NestedChild::class.qualifiedName}", substring = true)
             .assertIsDisplayed()
+        composeRule.onNodeWithText("message").assertIsDisplayed()
+        composeRule.onNodeWithText(\"Nested detail\").assertIsDisplayed()
+        composeRule.onNodeWithText("flag").assertIsDisplayed()
+        composeRule.onNodeWithText("true").assertIsDisplayed()
     }
 
     @Test
@@ -217,18 +218,16 @@ class RemoteConfigDialogContentTest {
         }
 
         composeRule.onNode(hasSetTextAction() and hasText("Remote Title")).performTextReplacement("Updated Title")
-        composeRule.onNodeWithText("Save").performClick()
+        composeRule.onNodeWithTag("save_button").performClick()
 
         composeRule.waitUntil { savedJson != null }
         val expectedOverride = json.encodeToString(FormConfig.serializer(), remoteConfig.copy(title = "Updated Title"))
         assertEquals(expectedOverride, savedJson)
 
         composeRule.onNodeWithText("Remote Value").assertIsDisplayed()
-        composeRule.onNodeWithText("\"title\": \"Remote Title\"", substring = true, useUnmergedTree = true)
-            .assertIsDisplayed()
+        composeRule.onNodeWithText(\"Remote Title\").assertIsDisplayed()
         composeRule.onNodeWithText("Override Value").assertIsDisplayed()
-        composeRule.onNodeWithText("\"title\": \"Updated Title\"", substring = true, useUnmergedTree = true)
-            .assertIsDisplayed()
+        composeRule.onNodeWithText(\"Updated Title\").assertIsDisplayed()
     }
 
     @Serializable
