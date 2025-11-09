@@ -704,7 +704,7 @@ private fun ListField(
     state: Any,
     onStateChange: (Any) -> Unit,
 ) {
-    val currentItems = (field.getter(state) as? List<Any?>).orEmpty()
+    val items = (field.getter(state) as? List<Any?>).orEmpty()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -714,55 +714,90 @@ private fun ListField(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(text = field.label, style = MaterialTheme.typography.bodySmall)
-        if (currentItems.isEmpty()) {
+        if (items.isEmpty()) {
             Button(onClick = {
                 val newItem = field.defaultItemProvider() ?: return@Button
-                val updated = listOf(newItem)
-                onStateChange(field.setter(state, updated))
+                onStateChange(field.setter(state, listOf(newItem)))
             }) {
                 Text("Add first item")
             }
         } else {
-            currentItems.forEachIndexed { index, item ->
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
-                        .padding(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(text = "Item[$index]", style = MaterialTheme.typography.titleSmall)
-                        Row {
-                            IconButton(onClick = {
-                                val newItem = field.defaultItemProvider() ?: return@IconButton
-                                val updated = currentItems.toMutableList().apply { add(index + 1, newItem) }
-                                onStateChange(field.setter(state, updated))
-                            }) {
-                                Icon(Icons.Filled.Add, contentDescription = "Add item")
-                            }
-                            IconButton(onClick = {
-                                val updated = currentItems.toMutableList().apply { removeAt(index) }
-                                onStateChange(field.setter(state, updated))
-                            }) {
-                                Icon(Icons.Filled.Delete, contentDescription = "Remove item")
-                            }
-                        }
-                    }
-                    FieldEditorItem(
-                        modifier = Modifier.fillMaxWidth(),
-                        fieldEditor = field.itemEditor,
-                        state = item ?: field.defaultItemProvider() ?: return@forEachIndexed,
-                        onStateChange = { updatedItem ->
-                            val updated = currentItems.toMutableList().apply { this[index] = updatedItem }
-                            onStateChange(field.setter(state, updated))
-                        }
+            items.forEachIndexed { index, item ->
+                key("list-${'$'}index-${'$'}{System.identityHashCode(item)}") {
+                    ListItemView(
+                        index = index,
+                        item = item,
+                        field = field,
+                        parentState = state,
+                        onStateChange = onStateChange
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ListItemView(
+    index: Int,
+    item: Any?,
+    field: ListFieldEditor,
+    parentState: Any,
+    onStateChange: (Any) -> Unit,
+) {
+    val resolvedItem = item ?: field.defaultItemProvider()
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "Item[$index]", style = MaterialTheme.typography.titleSmall)
+            Row {
+                IconButton(onClick = {
+                    val newItem = field.defaultItemProvider() ?: return@IconButton
+                    val updated = (field.getter(parentState) as? List<Any?>).orEmpty().toMutableList().apply {
+                        add(index + 1, newItem)
+                    }
+                    onStateChange(field.setter(parentState, updated))
+                }) {
+                    Icon(Icons.Filled.Add, contentDescription = "Add item after")
+                }
+                IconButton(onClick = {
+                    val updated = (field.getter(parentState) as? List<Any?>).orEmpty().toMutableList().apply {
+                        removeAt(index)
+                    }
+                    onStateChange(field.setter(parentState, updated))
+                }) {
+                    Icon(Icons.Filled.Delete, contentDescription = "Remove item")
+                }
+            }
+        }
+
+        if (resolvedItem != null) {
+            FieldEditorItem(
+                modifier = Modifier.fillMaxWidth(),
+                fieldEditor = field.itemEditor,
+                state = resolvedItem,
+                onStateChange = { updatedItem ->
+                    val updated = (field.getter(parentState) as? List<Any?>).orEmpty().toMutableList().apply {
+                        this[index] = updatedItem
+                    }
+                    onStateChange(field.setter(parentState, updated))
+                }
+            )
+        } else {
+            Text(
+                text = "Unable to render item",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
