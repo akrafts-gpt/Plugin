@@ -2,64 +2,65 @@ package io.github.remote.konfig.debug
 
 import android.content.Intent
 import android.os.Bundle
+import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
-import android.util.Base64
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.Divider
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.ExposedDropdownMenu
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.menuAnchor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.DialogFragment
 import io.github.remote.konfig.OverrideStore
 import io.github.remote.konfig.RemoteConfigProvider
+import kotlin.reflect.KClass
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -99,7 +100,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ): View {
         dialog?.window?.let { window ->
             WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -113,7 +114,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
         return ComposeView(context).apply {
             setContent {
                 MaterialTheme(colorScheme = darkColorScheme()) {
-                    RemoteConfigDialogContent(
+                    RemoteConfigEditorScreen(
                         title = screenTitle,
                         configKey = configKey,
                         remoteJson = remoteJson,
@@ -147,7 +148,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 }
 
 @Composable
-internal fun <T : Any> RemoteConfigDialogContent(
+internal fun <T : Any> RemoteConfigEditorScreen(
     title: String,
     configKey: String,
     remoteJson: String?,
@@ -160,214 +161,253 @@ internal fun <T : Any> RemoteConfigDialogContent(
     onReset: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val defaultState = remember(editor) { editor.defaultInstance() }
-    val initialJson = overrideJson?.takeIf { it.isNotBlank() }
-        ?: remoteJson?.takeIf { it.isNotBlank() }
-    val (startingState, initialError) = remember(initialJson, json, serializer) {
-        if (initialJson == null) {
-            defaultState to null
-        } else {
-            runCatching { json.decodeFromString(serializer, initialJson) }
-                .fold(
-                    onSuccess = { it to null },
-                    onFailure = { defaultState to it }
-                )
-        }
-    }
+    val defaultInstance = remember(editor) { editor.defaultInstance() }
+    val fieldEditors = remember(editor) { editor.fields() }
+    val initialRemoteJson = remoteJson.orEmpty()
+    val initialOverrideJson = overrideJson.orEmpty()
 
-    var currentState by remember { mutableStateOf(startingState) }
-    var rawJson by remember {
-        mutableStateOf(
-            initialJson ?: json.encodeToString(serializer, startingState)
+    var showCreateDialog by remember {
+        mutableStateOf(initialRemoteJson.isBlank() && initialOverrideJson.isBlank())
+    }
+    var proceedWithEditing by remember { mutableStateOf(!showCreateDialog) }
+
+    if (showCreateDialog) {
+        CreateNewConfigDialog(
+            configKey = configKey,
+            onConfirm = {
+                proceedWithEditing = true
+                showCreateDialog = false
+            },
+            onDismiss = onDismiss
         )
     }
-    var rawErrorMessage by remember { mutableStateOf(initialError?.message) }
-    var showRawEditor by remember { mutableStateOf(initialError != null) }
-    val pendingFieldValues = remember { mutableStateMapOf<String, String>() }
-    val fieldErrors = remember { mutableStateMapOf<String, String>() }
 
-    val fields: List<FieldEditor> = remember(editor) { editor.fields() }
-
-    val onRawValidated: (T) -> Unit = { decoded ->
-        currentState = decoded
-        pendingFieldValues.clear()
-        fieldErrors.clear()
-        showRawEditor = false
+    if (!proceedWithEditing) {
+        return
     }
 
-    val actionEnabled = if (showRawEditor) {
-        rawErrorMessage == null
-    } else {
-        fieldErrors.isEmpty()
-    }
+    val context = LocalContext.current
+    val initialJsonFromRepo = initialOverrideJson.ifBlank { initialRemoteJson }
 
-    val sharePayload = remember(showRawEditor, rawJson, currentState) {
-        if (showRawEditor) {
-            rawJson
+    var initialErrorMessage by remember { mutableStateOf<String?>(null) }
+    val initialState: T = remember(initialJsonFromRepo, json, serializer, defaultInstance) {
+        if (initialJsonFromRepo.isBlank()) {
+            defaultInstance
         } else {
-            json.encodeToString(serializer, currentState)
-        }
-    }
-
-    val onSaveClick: () -> Unit = {
-        if (showRawEditor) {
-            runCatching { json.decodeFromString(serializer, rawJson) }
-                .onSuccess { decoded ->
-                    onRawValidated(decoded)
-                    onSave(rawJson)
-                }
+            runCatching { json.decodeFromString(serializer, initialJsonFromRepo) }
                 .onFailure { throwable ->
-                    rawErrorMessage = throwable.message
+                    initialErrorMessage = throwable.message?.substringBefore(" at path:")
                 }
-        } else {
-            onSave(json.encodeToString(serializer, currentState))
+                .getOrElse { defaultInstance }
         }
     }
 
-    Scaffold(
-        modifier = Modifier
-            .fillMaxSize()
-            .imePadding(),
-        topBar = {
-            RemoteConfigDialogTopBar(
-                title = title,
-                onDismiss = onDismiss
-            )
-        },
-        bottomBar = {
-            Surface(tonalElevation = 3.dp) {
-                RemoteConfigDialogActionBar(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .windowInsetsPadding(
-                            WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom)
-                        )
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    enabled = actionEnabled,
-                    onShare = { onShare(sharePayload) },
-                    onSave = onSaveClick
+    var currentState by remember { mutableStateOf(initialState) }
+    var showRawJson by remember { mutableStateOf(initialErrorMessage != null) }
+    var rawJsonString by remember {
+        mutableStateOf(
+            if (initialJsonFromRepo.isNotBlank()) initialJsonFromRepo
+            else json.encodeToString(serializer, initialState)
+        )
+    }
+    var rawErrorMessage by remember { mutableStateOf(initialErrorMessage) }
+
+    val isCurrentRawJsonValid = remember(rawJsonString, showRawJson) {
+        if (!showRawJson) {
+            true
+        } else {
+            runCatching { json.decodeFromString(serializer, rawJsonString) }
+                .fold(
+                    onSuccess = {
+                        rawErrorMessage = null
+                        true
+                    },
+                    onFailure = { throwable ->
+                        rawErrorMessage = throwable.message?.substringBefore(" at path:")
+                        false
+                    }
                 )
+        }
+    }
+
+    val getCurrentJson: () -> String? = {
+        rawErrorMessage = null
+        if (showRawJson) {
+            runCatching { json.decodeFromString(serializer, rawJsonString) }
+                .onFailure { throwable ->
+                    rawErrorMessage = throwable.message?.substringBefore(" at path:")
+                }
+                .getOrNull()
+                ?.let { rawJsonString }
+        } else {
+            runCatching { json.encodeToString(serializer, currentState) }
+                .onFailure { throwable ->
+                    rawErrorMessage = throwable.message?.substringBefore(" at path:")
+                }
+                .getOrNull()
+        }
+    }
+
+    val onToggleRawMode: () -> Unit = toggle@{
+        val newMode = !showRawJson
+        rawErrorMessage = null
+        if (newMode) {
+            rawJsonString = json.encodeToString(serializer, currentState)
+        } else {
+            val result = runCatching { json.decodeFromString(serializer, rawJsonString) }
+            if (result.isFailure) {
+                rawErrorMessage = result.exceptionOrNull()?.message?.substringBefore(" at path:")
+                return@toggle
+            }
+            currentState = result.getOrThrow()
+        }
+        showRawJson = newMode
+    }
+
+    EditorDialog(
+        title = title,
+        onDismiss = onDismiss,
+        onSave = {
+            val payload = getCurrentJson()
+            if (payload != null) {
+                onSave(payload)
+            }
+        },
+        onShare = {
+            val payload = getCurrentJson()
+            if (payload != null) {
+                onShare(payload)
+            }
+        },
+        isRawMode = showRawJson,
+        isConfirmEnabled = if (showRawJson) isCurrentRawJsonValid else true,
+        headerContent = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    modifier = Modifier.testTag("config_key"),
+                    text = "Key: $configKey",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    modifier = Modifier.testTag("config_source"),
+                    text = if (initialOverrideJson.isNotBlank()) "Source: Override" else "Source: Remote",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (!isCurrentRawJsonValid && showRawJson) {
+                    Button(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("discard_and_create_new_button"),
+                        onClick = {
+                            val newInstance = editor.defaultInstance()
+                            currentState = newInstance
+                            rawJsonString = json.encodeToString(serializer, newInstance)
+                            showRawJson = false
+                            rawErrorMessage = null
+                            Toast.makeText(context, "Created new from default", Toast.LENGTH_SHORT).show()
+                        }
+                    ) {
+                        Text("Discard and create new")
+                    }
+                } else {
+                    OutlinedButton(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("raw_json_toggle_button"),
+                        onClick = onToggleRawMode,
+                        enabled = if (showRawJson) isCurrentRawJsonValid else true
+                    ) {
+                        Text(if (showRawJson) "View as Form" else "View as JSON")
+                    }
+                }
             }
         }
-    ) { innerPadding ->
+    ) {
         LazyColumn(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
-            contentPadding = PaddingValues(bottom = 32.dp),
+                .fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item("header") {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        text = "Key: $configKey",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    val overrideSource = overrideJson?.takeIf { it.isNotBlank() } != null
-                    Text(
-                        text = if (overrideSource) "Source: Override" else "Source: Remote",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    RemoteConfigModeToggle(
-                        modifier = Modifier.fillMaxWidth(),
-                        showRaw = showRawEditor,
-                        canSwitchToForm = rawErrorMessage == null,
-                        onToggle = { shouldShowRaw ->
-                            if (shouldShowRaw) {
-                                rawJson = json.encodeToString(serializer, currentState)
-                                rawErrorMessage = null
-                                showRawEditor = true
-                            } else {
-                                runCatching { json.decodeFromString(serializer, rawJson) }
-                                    .onSuccess { decoded ->
-                                        currentState = decoded
-                                        pendingFieldValues.clear()
-                                        fieldErrors.clear()
-                                        rawErrorMessage = null
-                                        showRawEditor = false
-                                    }
-                                    .onFailure { throwable ->
-                                        rawErrorMessage = throwable.message
-                                    }
+            if (showRawJson) {
+                item("raw_json") {
+                    OutlinedTextField(
+                        value = rawJsonString,
+                        onValueChange = { newValue ->
+                            rawJsonString = newValue
+                            rawErrorMessage = null
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("raw_json_editor"),
+                        label = { Text("Raw JSON") },
+                        minLines = 5,
+                        isError = !isCurrentRawJsonValid,
+                        supportingText = {
+                            if (!isCurrentRawJsonValid) {
+                                Text(rawErrorMessage ?: "Invalid JSON")
                             }
                         }
                     )
                 }
-                Divider(modifier = Modifier.padding(top = 8.dp))
-            }
 
-            if (showRawEditor) {
-                item("raw_editor") {
-                    RawJsonEditor(
-                        modifier = Modifier.fillMaxWidth(),
-                        value = rawJson,
-                        errorMessage = rawErrorMessage,
-                        onValueChange = { newValue ->
-                            rawJson = newValue
-                            rawErrorMessage = runCatching {
-                                json.decodeFromString(serializer, newValue)
-                            }.fold(
-                                onSuccess = { null },
-                                onFailure = { failure -> failure.message }
-                            )
-                        }
-                    )
-                }
-
-                rawJson.takeIf { it.isNotBlank() }?.let { activeJson ->
-                    item("raw_active_values") {
+                val activeJson = initialJsonFromRepo.takeIf { it.isNotBlank() }
+                if (activeJson != null) {
+                    item("active_value") {
                         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            ReadOnlyField(label = "Active Value", value = activeJson)
-                            if (overrideJson?.isNotBlank() == true) {
+                            ReadOnlyField(
+                                label = if (initialOverrideJson.isNotBlank()) {
+                                    "Active Value (Overridden on device)"
+                                } else {
+                                    "Active Value (From Remote)"
+                                },
+                                value = activeJson
+                            )
+                            if (initialOverrideJson.isNotBlank()) {
                                 Button(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.error
-                                    ),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("reset_to_remote_button"),
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                     onClick = onReset
                                 ) {
-                                    Text("Remove Override")
+                                    Text("Remove Local Value")
                                 }
                             }
                         }
                     }
                 }
             } else {
-                item("form_fields") {
-                    FieldEditorsColumn(
+                itemsIndexed(fieldEditors, key = { index, field -> field.label.ifBlank { index.toString() } }) { _, field ->
+                    FieldEditorItem(
                         modifier = Modifier.fillMaxWidth(),
-                        fieldEditors = fields,
+                        fieldEditor = field,
                         state = currentState,
                         onStateChange = { updated ->
                             @Suppress("UNCHECKED_CAST")
                             currentState = updated as T
-                        },
-                        pendingValues = pendingFieldValues,
-                        fieldErrors = fieldErrors,
-                        path = ""
+                        }
                     )
                 }
-            }
 
-            if (!showRawEditor) {
-                item("form_footer") {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        remoteJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                            ReadOnlyField(label = "Remote Value", value = payload)
-                        }
-                        overrideJson?.takeIf { it.isNotBlank() }?.let { payload ->
-                            ReadOnlyField(label = "Override Value", value = payload)
+                if (initialRemoteJson.isNotBlank()) {
+                    item("remote_value") {
+                        ReadOnlyField(label = "Remote Value", value = initialRemoteJson)
+                    }
+                }
+                if (initialOverrideJson.isNotBlank()) {
+                    item("override_value") {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ReadOnlyField(label = "Override Value", value = initialOverrideJson)
                             Button(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error
-                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("reset_override_button"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                 onClick = onReset
                             ) {
-                                Text("Remove Override")
+                                Text("Remove Local Value")
                             }
                         }
                     }
@@ -377,23 +417,28 @@ internal fun <T : Any> RemoteConfigDialogContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun RemoteConfigDialogTopBar(
-    title: String,
+private fun CreateNewConfigDialog(
+    configKey: String,
+    onConfirm: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    TopAppBar(
-        title = {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Create New Config?", style = MaterialTheme.typography.headlineSmall) },
+        text = {
             Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                "No value found for key \"$configKey\".\n\nDo you want to create a new one using the default values?",
+                style = MaterialTheme.typography.bodyMedium
             )
         },
-        navigationIcon = {
-            TextButton(onClick = onDismiss) {
+        confirmButton = {
+            Button(onClick = onConfirm, modifier = Modifier.testTag("create_confirm_button")) {
+                Text("Yes, Create")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("create_cancel_button")) {
                 Text("Close")
             }
         }
@@ -401,125 +446,62 @@ private fun RemoteConfigDialogTopBar(
 }
 
 @Composable
-private fun RemoteConfigDialogActionBar(
-    modifier: Modifier,
-    enabled: Boolean,
-    onShare: () -> Unit,
+private fun EditorDialog(
+    title: String,
+    onDismiss: () -> Unit,
     onSave: () -> Unit,
+    onShare: () -> Unit,
+    isRawMode: Boolean,
+    isConfirmEnabled: Boolean,
+    headerContent: @Composable () -> Unit,
+    mainContent: @Composable () -> Unit,
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.surface)
+            .safeDrawingPadding()
+            .imePadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        TextButton(
-            onClick = onShare,
-            enabled = enabled
-        ) {
-            Text("Share")
-        }
-        Spacer(modifier = Modifier.weight(1f))
-        TextButton(
-            onClick = onSave,
-            enabled = enabled
-        ) {
-            Text("Save")
-        }
-    }
-}
-
-@Composable
-private fun RemoteConfigModeToggle(
-    modifier: Modifier = Modifier,
-    showRaw: Boolean,
-    canSwitchToForm: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
-    OutlinedButton(
-        modifier = modifier,
-        onClick = {
-            if (showRaw) {
-                onToggle(false)
-            } else {
-                onToggle(true)
-            }
-        },
-        enabled = if (showRaw) canSwitchToForm else true
-    ) {
-        Text(if (showRaw) "View as Form" else "View as JSON")
-    }
-}
-
-@Composable
-private fun RawJsonEditor(
-    modifier: Modifier,
-    value: String,
-    errorMessage: String?,
-    onValueChange: (String) -> Unit,
-) {
-    OutlinedTextField(
-        modifier = modifier.heightIn(min = 160.dp),
-        value = value,
-        onValueChange = onValueChange,
-        label = { Text("Raw JSON") },
-        isError = errorMessage != null,
-        supportingText = {
-            errorMessage?.let { Text(it) }
-        }
-    )
-}
-
-@Composable
-private fun ReadOnlyField(
-    label: String,
-    value: String,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Surface(
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            tonalElevation = 1.dp
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(12.dp)
-            )
+            TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_button")) {
+                Text("Cancel")
+            }
+            Text(text = title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("title"))
+            if (isRawMode) {
+                Button(onClick = onShare, enabled = isConfirmEnabled, modifier = Modifier.testTag("share_button")) {
+                    Text("Share")
+                }
+            } else {
+                Button(onClick = onSave, enabled = isConfirmEnabled, modifier = Modifier.testTag("save_button")) {
+                    Text("Save")
+                }
+            }
+        }
+
+        headerContent()
+
+        Box(modifier = Modifier.weight(1f)) {
+            mainContent()
         }
     }
 }
 
-private enum class NumericType { INT, LONG, FLOAT, DOUBLE }
-
 @Composable
-private fun FieldEditorsColumn(
-    modifier: Modifier,
-    fieldEditors: List<FieldEditor>,
-    state: Any,
-    onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        fieldEditors.forEachIndexed { index, fieldEditor ->
-            FieldEditorItem(
-                modifier = Modifier.fillMaxWidth(),
-                fieldEditor = fieldEditor,
-                state = state,
-                onStateChange = onStateChange,
-                pendingValues = pendingValues,
-                fieldErrors = fieldErrors,
-                path = buildFieldPath(path, fieldEditor.label, index)
-            )
-        }
+private fun ReadOnlyField(label: String, value: String) {
+    Column(modifier = Modifier
+        .fillMaxWidth()
+        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+        .padding(12.dp)) {
+        Text(text = label, style = MaterialTheme.typography.labelMedium)
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(text = value, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -529,22 +511,19 @@ private fun FieldEditorItem(
     fieldEditor: FieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
 ) {
     when (fieldEditor) {
         is StringFieldEditor -> StringField(modifier, fieldEditor, state, onStateChange)
         is BooleanFieldEditor -> BooleanField(modifier, fieldEditor, state, onStateChange)
-        is IntFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.INT)
-        is LongFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.LONG)
-        is FloatFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.FLOAT)
-        is DoubleFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.DOUBLE)
+        is IntFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange) { it.toIntOrNull() }
+        is LongFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange) { it.toLongOrNull() }
+        is FloatFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange) { it.toFloatOrNull() }
+        is DoubleFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange) { it.toDoubleOrNull() }
         is EnumFieldEditor -> EnumField(modifier, fieldEditor, state, onStateChange)
-        is ByteArrayFieldEditor -> ByteArrayField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
-        is ClassFieldEditor -> ClassField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
-        is ListFieldEditor -> ListField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
-        is PolymorphicFieldEditor -> PolymorphicField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
+        is ByteArrayFieldEditor -> ByteArrayField(modifier, fieldEditor, state, onStateChange)
+        is ClassFieldEditor -> ClassField(modifier, fieldEditor, state, onStateChange)
+        is ListFieldEditor -> ListField(modifier, fieldEditor, state, onStateChange)
+        is PolymorphicFieldEditor -> PolymorphicField(modifier, fieldEditor, state, onStateChange)
     }
 }
 
@@ -556,11 +535,11 @@ private fun StringField(
     onStateChange: (Any) -> Unit,
 ) {
     OutlinedTextField(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(field.label),
         value = field.getter(state) as? String ?: "",
-        onValueChange = { updated ->
-            onStateChange(field.setter(state, updated))
-        },
+        onValueChange = { updated -> onStateChange(field.setter(state, updated)) },
         label = { Text(field.label) }
     )
 }
@@ -574,17 +553,14 @@ private fun BooleanField(
 ) {
     val value = field.getter(state) as? Boolean ?: false
     Row(
-        modifier = modifier,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        Switch(checked = value, onCheckedChange = { onStateChange(field.setter(state, it)) })
         Text(text = field.label, style = MaterialTheme.typography.bodyLarge)
-        androidx.compose.material3.Switch(
-            checked = value,
-            onCheckedChange = { checked ->
-                onStateChange(field.setter(state, checked))
-            }
-        )
     }
 }
 
@@ -594,42 +570,25 @@ private fun NumericField(
     field: FieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
-    type: NumericType,
+    parser: (String) -> Number?,
 ) {
-    val key = path
-    val currentText = pendingValues[key] ?: (field.getter(state)?.toString() ?: "")
+    var text by remember(state) { mutableStateOf(field.getter(state)?.toString().orEmpty()) }
     OutlinedTextField(
-        modifier = modifier,
-        value = currentText,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(field.label),
+        value = text,
         onValueChange = { updated ->
-            pendingValues[key] = updated
-            val parsed = when (type) {
-                NumericType.INT -> updated.toIntOrNull()
-                NumericType.LONG -> updated.toLongOrNull()
-                NumericType.FLOAT -> updated.toFloatOrNull()
-                NumericType.DOUBLE -> updated.toDoubleOrNull()
-            }
-            if (parsed != null) {
-                pendingValues.remove(key)
-                fieldErrors.remove(key)
-                onStateChange(field.setter(state, parsed))
-            } else {
-                fieldErrors[key] = "Invalid number"
+            text = updated
+            parser(updated)?.let { number ->
+                onStateChange(field.setter(state, number))
             }
         },
-        label = { Text(fieldLabel(path, field)) },
-        isError = fieldErrors.containsKey(key),
-        supportingText = {
-            fieldErrors[key]?.let { Text(it) }
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        label = { Text(field.label) }
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun EnumField(
     modifier: Modifier,
@@ -638,32 +597,35 @@ private fun EnumField(
     onStateChange: (Any) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val options = field.values
-    val selected = field.getter(state) as? Enum<*>
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded },
-        modifier = modifier
-    ) {
+    val current = field.getter(state) as? Enum<*>
+    Box(modifier = modifier
+        .fillMaxWidth()
+        .clickable { expanded = true }) {
         OutlinedTextField(
-            modifier = Modifier.menuAnchor().fillMaxWidth(),
-            readOnly = true,
-            value = selected?.name ?: "",
+            value = current?.name ?: "",
             onValueChange = {},
             label = { Text(field.label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag(field.label),
+            readOnly = true,
+            enabled = false,
+            colors = OutlinedTextFieldDefaults.colors(
+                disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                disabledBorderColor = MaterialTheme.colorScheme.outline,
+                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+            ),
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
         )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            options.forEach { option ->
+
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            field.values.forEach { value ->
                 DropdownMenuItem(
-                    text = { Text(option.name) },
+                    text = { Text(value.name) },
                     onClick = {
                         expanded = false
-                        onStateChange(field.setter(state, option))
+                        onStateChange(field.setter(state, value))
                     }
                 )
             }
@@ -677,36 +639,29 @@ private fun ByteArrayField(
     field: ByteArrayFieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
 ) {
-    val key = path
-    val existing = pendingValues[key] ?: ((field.getter(state) as? ByteArray)?.let { Base64.encodeToString(it, Base64.NO_WRAP) } ?: "")
+    var text by remember(state) {
+        mutableStateOf(
+            (field.getter(state) as? ByteArray)?.let { Base64.encodeToString(it, Base64.DEFAULT) } ?: ""
+        )
+    }
     OutlinedTextField(
-        modifier = modifier,
-        value = existing,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag(field.label),
+        value = text,
         onValueChange = { updated ->
-            pendingValues[key] = updated
-            if (updated.isBlank()) {
-                pendingValues.remove(key)
-                fieldErrors.remove(key)
-                onStateChange(field.setter(state, ByteArray(0)))
+            text = updated
+            val decoded = if (updated.isBlank()) {
+                ByteArray(0)
             } else {
-                val decoded = runCatching { Base64.decode(updated, Base64.DEFAULT) }.getOrNull()
-                if (decoded != null) {
-                    pendingValues.remove(key)
-                    fieldErrors.remove(key)
-                    onStateChange(field.setter(state, decoded))
-                } else {
-                    fieldErrors[key] = "Invalid Base64"
-                }
+                runCatching { Base64.decode(updated, Base64.DEFAULT) }.getOrNull()
             }
+            decoded?.let { onStateChange(field.setter(state, it)) }
         },
-        label = { Text(fieldLabel(path, field)) },
-        isError = fieldErrors.containsKey(key),
+        label = { Text(field.label) },
         supportingText = {
-            fieldErrors[key]?.let { Text(it) }
+            Text("Value is encoded as Base64")
         }
     )
 }
@@ -717,33 +672,26 @@ private fun ClassField(
     field: ClassFieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
 ) {
-    val nestedState = field.getter(state) ?: return UnsupportedField(modifier, field::class.java.simpleName)
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
+    val nestedState = field.getter(state)
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+            .animateContentSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
-            FieldEditorsColumn(
+        Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        field.nestedFieldEditors.forEach { nestedEditor ->
+            FieldEditorItem(
                 modifier = Modifier.fillMaxWidth(),
-                fieldEditors = field.nestedFieldEditors,
-                state = nestedState,
+                fieldEditor = nestedEditor,
+                state = nestedState ?: return@forEach,
                 onStateChange = { updated ->
-                    onStateChange(field.setter(state, updated))
-                },
-                pendingValues = pendingValues,
-                fieldErrors = fieldErrors,
-                path = path
+                    val updatedContainer = field.setter(state, updated)
+                    onStateChange(updatedContainer)
+                }
             )
         }
     }
@@ -755,75 +703,65 @@ private fun ListField(
     field: ListFieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
 ) {
-    var items by remember(state) {
-        mutableStateOf((field.getter(state) as? List<*>)?.map { it ?: field.defaultItemProvider() } ?: emptyList())
-    }
-
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
+    val currentItems = (field.getter(state) as? List<Any?>).orEmpty()
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+            .animateContentSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
-            items.forEachIndexed { index, item ->
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp),
-                    tonalElevation = 1.dp,
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(text = "Item ${index + 1}", style = MaterialTheme.typography.titleSmall)
-                            TextButton(onClick = {
-                                val updated = items.toMutableList().apply { removeAt(index) }
-                                items = updated
-                                val itemPath = buildFieldPath(path, field.label, index)
-                                clearFieldStateForPath(itemPath, pendingValues, fieldErrors)
-                                onStateChange(field.setter(state, updated))
-                            }) {
-                                Text("Remove")
-                            }
-                        }
-                        FieldEditorItem(
-                            modifier = Modifier.fillMaxWidth(),
-                            fieldEditor = field.itemEditor,
-                            state = item ?: field.defaultItemProvider().orEmptyDefault(),
-                            onStateChange = { updatedItem ->
-                                val updated = items.toMutableList().apply { this[index] = updatedItem }
-                                items = updated
-                                onStateChange(field.setter(state, updated))
-                            },
-                            pendingValues = pendingValues,
-                            fieldErrors = fieldErrors,
-                            path = buildFieldPath(path, field.label, index)
-                        )
-                    }
-                }
-            }
-            OutlinedButton(onClick = {
-                val newItem = field.defaultItemProvider() ?: return@OutlinedButton
-                val updated = items + newItem
-                items = updated
+        Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        if (currentItems.isEmpty()) {
+            Button(onClick = {
+                val newItem = field.defaultItemProvider() ?: return@Button
+                val updated = listOf(newItem)
                 onStateChange(field.setter(state, updated))
             }) {
-                Text("Add Item")
+                Text("Add first item")
+            }
+        } else {
+            currentItems.forEachIndexed { index, item ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+                        .padding(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(text = "Item[$index]", style = MaterialTheme.typography.titleSmall)
+                        Row {
+                            IconButton(onClick = {
+                                val newItem = field.defaultItemProvider() ?: return@IconButton
+                                val updated = currentItems.toMutableList().apply { add(index + 1, newItem) }
+                                onStateChange(field.setter(state, updated))
+                            }) {
+                                Icon(Icons.Filled.Add, contentDescription = "Add item")
+                            }
+                            IconButton(onClick = {
+                                val updated = currentItems.toMutableList().apply { removeAt(index) }
+                                onStateChange(field.setter(state, updated))
+                            }) {
+                                Icon(Icons.Filled.Delete, contentDescription = "Remove item")
+                            }
+                        }
+                    }
+                    FieldEditorItem(
+                        modifier = Modifier.fillMaxWidth(),
+                        fieldEditor = field.itemEditor,
+                        state = item ?: field.defaultItemProvider() ?: return@forEachIndexed,
+                        onStateChange = { updatedItem ->
+                            val updated = currentItems.toMutableList().apply { this[index] = updatedItem }
+                            onStateChange(field.setter(state, updated))
+                        }
+                    )
+                }
             }
         }
     }
@@ -835,9 +773,6 @@ private fun PolymorphicField(
     field: PolymorphicFieldEditor,
     state: Any,
     onStateChange: (Any) -> Unit,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>,
-    path: String,
 ) {
     var expanded by remember { mutableStateOf(false) }
     var selectedClass by remember(state) {
@@ -845,112 +780,62 @@ private fun PolymorphicField(
     }
     var selectedValue by remember(state) { mutableStateOf(field.getter(state)) }
 
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+            .animateContentSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
+        Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        Box(modifier = Modifier.clickable { expanded = true }) {
+            OutlinedTextField(
+                value = selectedClass?.simpleName ?: "Select Type",
+                onValueChange = {},
+                label = { Text("Type") },
+                modifier = Modifier.fillMaxWidth(),
+                readOnly = true,
+                enabled = false,
+                colors = OutlinedTextFieldDefaults.colors(
+                    disabledTextColor = MaterialTheme.colorScheme.onSurface,
+                    disabledBorderColor = MaterialTheme.colorScheme.outline,
+                    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+                trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+            )
 
-            if (field.subclasses.isEmpty()) {
-                Text("No subclasses available", color = MaterialTheme.colorScheme.error)
-                return@Column
-            }
-
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = { expanded = !expanded }
-            ) {
-                OutlinedTextField(
-                    modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    readOnly = true,
-                    value = selectedClass?.simpleName ?: "",
-                    onValueChange = {},
-                    label = { Text("Type") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    field.subclasses.forEach { subclass ->
-                        DropdownMenuItem(
-                            text = { Text(subclass.simpleName ?: subclass.toString()) },
-                            onClick = {
-                                expanded = false
-                                selectedClass = subclass
-                                val newInstance = field.defaultInstanceProvider(subclass)
-                                selectedValue = newInstance
-                                if (newInstance != null) {
-                                    onStateChange(field.setter(state, newInstance))
-                                }
-                            }
-                        )
-                    }
+            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                field.subclasses.forEach { subclass ->
+                    DropdownMenuItem(
+                        text = { Text(subclass.simpleName ?: subclass.toString()) },
+                        onClick = {
+                            expanded = false
+                            selectedClass = subclass
+                            val instance = field.defaultInstanceProvider(subclass)
+                            selectedValue = instance
+                            onStateChange(field.setter(state, instance))
+                        }
+                    )
                 }
             }
+        }
 
-            val clazz = selectedClass
-            val value = selectedValue
-            if (clazz != null && value != null) {
-                FieldEditorsColumn(
+        val clazz: KClass<*>? = selectedClass
+        val value = selectedValue
+        if (clazz != null && value != null) {
+            field.nestedFieldEditorsProvider(clazz).forEach { nested ->
+                FieldEditorItem(
                     modifier = Modifier.fillMaxWidth(),
-                    fieldEditors = field.nestedFieldEditorsProvider(clazz),
+                    fieldEditor = nested,
                     state = value,
                     onStateChange = { updated ->
                         selectedValue = updated
                         onStateChange(field.setter(state, updated))
-                    },
-                    pendingValues = pendingValues,
-                    fieldErrors = fieldErrors,
-                    path = buildFieldPath(path, clazz.simpleName ?: "type")
+                    }
                 )
             }
         }
     }
-}
-
-@Composable
-private fun UnsupportedField(modifier: Modifier, reason: String) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        tonalElevation = 1.dp
-    ) {
-        Text(
-            text = "Unsupported field ($reason). Edit using JSON mode.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(12.dp)
-        )
-    }
-}
-
-private fun buildFieldPath(parent: String, label: String, index: Int? = null): String {
-    val sanitized = label.replace(" ", "_")
-    val withIndex = index?.let { "$sanitized#$it" } ?: sanitized
-    return if (parent.isBlank()) withIndex else "$parent.$withIndex"
-}
-
-private fun fieldLabel(path: String, field: FieldEditor): String {
-    return field.label.ifBlank { path.substringAfterLast('.') }
-}
-
-private fun Any?.orEmptyDefault(): Any = this ?: ""
-
-private fun clearFieldStateForPath(
-    prefix: String,
-    pendingValues: MutableMap<String, String>,
-    fieldErrors: MutableMap<String, String>
-) {
-    val pendingKeys = pendingValues.keys.filter { it.startsWith(prefix) }
-    pendingKeys.forEach { pendingValues.remove(it) }
-    val errorKeys = fieldErrors.keys.filter { it.startsWith(prefix) }
-    errorKeys.forEach { fieldErrors.remove(it) }
 }

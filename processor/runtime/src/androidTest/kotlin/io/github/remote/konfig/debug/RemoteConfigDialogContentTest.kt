@@ -67,7 +67,7 @@ class RemoteConfigDialogContentTest {
 
         composeRule.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                RemoteConfigDialogContent(
+                RemoteConfigEditorScreen(
                     title = "Sample Config",
                     configKey = editor.key,
                     remoteJson = remotePayload,
@@ -84,17 +84,18 @@ class RemoteConfigDialogContentTest {
         }
 
         composeRule.onNodeWithText("Key: sample_config").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Close").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Share").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Cancel").assertCountEquals(1)
         composeRule.onAllNodesWithText("Save").assertCountEquals(1)
         composeRule.onNodeWithText("Unsupported").assertIsDisplayed()
 
         composeRule.onNodeWithText("View as JSON").performClick()
         composeRule.onNodeWithText("View as Form").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Share").assertCountEquals(1)
 
         val updated = json.encodeToString(SampleConfig.serializer(), SampleConfig("Updated", true, 42))
         composeRule.onNode(hasSetTextAction()).performTextReplacement(updated)
         composeRule.onNodeWithText("Share").performClick()
+        composeRule.onNodeWithText("View as Form").performClick()
         composeRule.onNodeWithText("Save").performClick()
 
         composeRule.waitUntil { sharedJson != null }
