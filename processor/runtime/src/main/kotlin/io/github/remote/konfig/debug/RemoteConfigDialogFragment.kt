@@ -56,6 +56,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.DialogFragment
@@ -469,12 +470,19 @@ private fun EditorDialog(
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_button")) {
                 Text("Cancel")
             }
-            Text(text = title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.testTag("title"))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("title"),
+                textAlign = TextAlign.Center
+            )
             if (isRawMode) {
                 Button(onClick = onShare, enabled = isConfirmEnabled, modifier = Modifier.testTag("share_button")) {
                     Text("Share")
