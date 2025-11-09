@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.asMap
 import androidx.datastore.preferences.preferencesDataStoreFile
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 
 /**
  * Stores override values for remote configuration keys. When constructed with a [Context],
@@ -30,6 +30,7 @@ class OverrideStore @JvmOverloads constructor(
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     private val overrides = ConcurrentHashMap<String, String>()
+    private val blobKey = stringPreferencesKey(STORED_BLOB_KEY)
 
     private val dataStore: DataStore<Preferences>? = context?.let { appContext ->
         PreferenceDataStoreFactory.create(
@@ -60,13 +61,7 @@ class OverrideStore @JvmOverloads constructor(
      */
     fun put(key: String, value: String) {
         overrides[key] = value
-        dataStore?.let { store ->
-            scope.launch {
-                store.edit { prefs ->
-                    prefs[stringPreferencesKey(key)] = value
-                }
-            }
-        }
+        persistOverrides()
     }
 
     fun setOverride(key: String, value: String) {
@@ -78,13 +73,7 @@ class OverrideStore @JvmOverloads constructor(
      */
     fun remove(key: String) {
         overrides.remove(key)
-        dataStore?.let { store ->
-            scope.launch {
-                store.edit { prefs ->
-                    prefs.remove(stringPreferencesKey(key))
-                }
-            }
-        }
+        persistOverrides()
     }
 
     fun clearOverride(key: String) {
@@ -96,26 +85,57 @@ class OverrideStore @JvmOverloads constructor(
      */
     fun clear() {
         overrides.clear()
+        persistOverrides()
+    }
+
+    private fun applySnapshot(preferences: Preferences) {
+        val blob = preferences[blobKey]
+        if (blob == null) {
+            overrides.clear()
+            return
+        }
+        val parsed = parseOverrides(blob) ?: return
+        overrides.clear()
+        overrides.putAll(parsed)
+    }
+
+    private fun persistOverrides() {
+        val snapshot = overrides.toMap()
         dataStore?.let { store ->
             scope.launch {
                 store.edit { prefs ->
-                    prefs.clear()
+                    if (snapshot.isEmpty()) {
+                        prefs.remove(blobKey)
+                    } else {
+                        prefs[blobKey] = encodeOverrides(snapshot)
+                    }
                 }
             }
         }
     }
 
-    private fun applySnapshot(preferences: Preferences) {
-        val persisted = preferences.asMap()
-            .mapNotNull { (key, rawValue) ->
-                val value = rawValue as? String ?: return@mapNotNull null
-                key.name to value
+    private fun parseOverrides(json: String): Map<String, String>? {
+        return runCatching {
+            val parsed = mutableMapOf<String, String>()
+            val jsonObject = JSONObject(json)
+            val keys = jsonObject.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                val value = jsonObject.optString(key, null) ?: continue
+                parsed[key] = value
             }
-        overrides.clear()
-        overrides.putAll(persisted)
+            parsed
+        }.getOrNull()
+    }
+
+    private fun encodeOverrides(values: Map<String, String>): String {
+        val jsonObject = JSONObject()
+        values.forEach { (key, value) -> jsonObject.put(key, value) }
+        return jsonObject.toString()
     }
 
     private companion object {
         private const val DATASTORE_FILE_NAME = "remote_config_overrides"
+        private const val STORED_BLOB_KEY = "__overrides_blob__"
     }
 }
