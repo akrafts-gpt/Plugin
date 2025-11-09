@@ -582,6 +582,8 @@ private fun NumericField(
     parser: (String) -> Number?,
 ) {
     var text by remember(state) { mutableStateOf(field.getter(state)?.toString().orEmpty()) }
+    var errorMessage by remember(state) { mutableStateOf<String?>(null) }
+
     OutlinedTextField(
         modifier = modifier
             .fillMaxWidth()
@@ -589,9 +591,29 @@ private fun NumericField(
         value = text,
         onValueChange = { updated ->
             text = updated
-            parser(updated)?.let { number ->
-                onStateChange(field.setter(state, number))
+
+            if (updated.isBlank()) {
+                val result = runCatching { field.setter(state, null) }
+                result.onSuccess { newState ->
+                    errorMessage = null
+                    onStateChange(newState)
+                }.onFailure {
+                    errorMessage = "Field cannot be empty"
+                }
+                return@OutlinedTextField
             }
+
+            val parsed = parser(updated)
+            if (parsed != null) {
+                errorMessage = null
+                onStateChange(field.setter(state, parsed))
+            } else {
+                errorMessage = "Invalid number"
+            }
+        },
+        isError = errorMessage != null,
+        supportingText = {
+            errorMessage?.let { Text(it) }
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         label = { Text(field.label) }
