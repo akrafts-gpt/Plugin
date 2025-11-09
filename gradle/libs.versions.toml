@@ -18,6 +18,8 @@ kotlinpoet = "1.16.0"
 material = "1.12.0"
 robolectric = "4.13"
 compile-testing = "1.5.0"
+kotlinx-coroutines = "1.8.1"
+androidx-datastore = "1.1.1"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
@@ -51,6 +53,8 @@ hilt-compiler = { module = "com.google.dagger:hilt-android-compiler", version.re
 hilt-android-testing = { module = "com.google.dagger:hilt-android-testing", version.ref = "hilt" }
 material = { module = "com.google.android.material:material", version.ref = "material" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore" }
+kotlinx-coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "kotlinx-coroutines" }
 [bundles]
 compose = ["compose-ui", "compose-ui-tooling-preview", "compose-material3"]
 

@@ -464,13 +464,13 @@ private fun EditorDialog(
             .background(MaterialTheme.colorScheme.surface)
             .safeDrawingPadding()
             .imePadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_button")) {
                 Text("Cancel")
