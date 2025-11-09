@@ -255,7 +255,7 @@ private class EditorGenerator(
                     val subclasses = propertyDeclaration.findPolymorphicSubclasses().toList()
                     if (subclasses.isEmpty()) {
                         logger.warn("No subclasses found for polymorphic property ${propertyName} of ${classDeclaration.simpleName.asString()}")
-                        listBlock.add("%T(%S, %L, %L)\n", STRING_FIELD_EDITOR, label, getter, setter)
+                        listBlock.add("%T(%S, %L, %L)", STRING_FIELD_EDITOR, label, getter, setter)
                     } else {
                         listBlock.add(generatePolymorphicFieldEditor(label, getter, setter, subclasses))
                     }
