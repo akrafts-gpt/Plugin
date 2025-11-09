@@ -25,6 +25,8 @@ android {
 dependencies {
     implementation(libs.androidx.fragment)
     implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.datastore.preferences)
+    implementation(libs.kotlinx.coroutines.android)
 
     testImplementation(kotlin("test"))
     testImplementation("junit:junit:4.13.2")

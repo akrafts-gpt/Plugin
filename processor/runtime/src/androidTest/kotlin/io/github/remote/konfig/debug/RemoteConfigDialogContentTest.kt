@@ -17,6 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import io.github.remote.konfig.sample.SampleOption
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,37 +40,34 @@ class RemoteConfigDialogContentTest {
 
             override fun defaultInstance(): SampleConfig = SampleConfig("Default", false, 0)
 
-            override fun fields(): List<EditorField<SampleConfig>> = listOf(
-                EditorField(
-                    name = "title",
-                    type = "kotlin.String",
-                    getter = { it.title },
-                    setter = { data, value -> data.copy(title = value as String) }
+            override fun fields(): List<FieldEditor> = listOf(
+                StringFieldEditor(
+                    label = "Title",
+                    getter = { (it as SampleConfig).title },
+                    setter = { data, value -> (data as SampleConfig).copy(title = value as String) }
                 ),
-                EditorField(
-                    name = "enabled",
-                    type = "kotlin.Boolean",
-                    getter = { it.enabled },
-                    setter = { data, value -> data.copy(enabled = value as Boolean) }
+                BooleanFieldEditor(
+                    label = "Enabled",
+                    getter = { (it as SampleConfig).enabled },
+                    setter = { data, value -> (data as SampleConfig).copy(enabled = value as Boolean) }
                 ),
-                EditorField(
-                    name = "count",
-                    type = "kotlin.Int",
-                    getter = { it.count },
-                    setter = { data, value -> data.copy(count = (value as Number).toInt()) }
+                IntFieldEditor(
+                    label = "Count",
+                    getter = { (it as SampleConfig).count },
+                    setter = { data, value -> (data as SampleConfig).copy(count = value as Int) }
                 ),
-                EditorField(
-                    name = "unsupported",
-                    type = "io.github.remote.konfig.sample.SampleOption",
-                    getter = { _ -> null },
-                    setter = { data, _ -> data }
+                EnumFieldEditor(
+                    label = "Unsupported",
+                    getter = { null },
+                    setter = { data, _ -> data },
+                    values = SampleOption.values().toList()
                 )
             )
         }
 
         composeRule.setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                RemoteConfigDialogContent(
+                RemoteConfigEditorScreen(
                     title = "Sample Config",
                     configKey = editor.key,
                     remoteJson = remotePayload,
@@ -86,18 +84,18 @@ class RemoteConfigDialogContentTest {
         }
 
         composeRule.onNodeWithText("Key: sample_config").assertIsDisplayed()
-        composeRule.onAllNodesWithText("Close").assertCountEquals(1)
-        composeRule.onAllNodesWithText("Share").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Cancel").assertCountEquals(1)
         composeRule.onAllNodesWithText("Save").assertCountEquals(1)
-        composeRule.onNodeWithText("Unsupported field type io.github.remote.konfig.sample.SampleOption. Edit using JSON mode.")
-            .assertIsDisplayed()
+        composeRule.onNodeWithText("Unsupported").assertIsDisplayed()
 
         composeRule.onNodeWithText("View as JSON").performClick()
         composeRule.onNodeWithText("View as Form").assertIsDisplayed()
+        composeRule.onAllNodesWithText("Share").assertCountEquals(1)
 
         val updated = json.encodeToString(SampleConfig.serializer(), SampleConfig("Updated", true, 42))
         composeRule.onNode(hasSetTextAction()).performTextReplacement(updated)
         composeRule.onNodeWithText("Share").performClick()
+        composeRule.onNodeWithText("View as Form").performClick()
         composeRule.onNodeWithText("Save").performClick()
 
         composeRule.waitUntil { sharedJson != null }
