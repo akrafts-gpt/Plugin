@@ -6,7 +6,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.core.PreferencesKt.asMap
+import androidx.datastore.preferences.core.asMap
 import androidx.datastore.preferences.preferencesDataStoreFile
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
@@ -106,10 +106,10 @@ class OverrideStore @JvmOverloads constructor(
     }
 
     private fun applySnapshot(preferences: Preferences) {
-        val persisted = asMap(preferences)
-            .mapNotNull { entry ->
-                val value = entry.value as? String ?: return@mapNotNull null
-                entry.key.name to value
+        val persisted = preferences.asMap()
+            .mapNotNull { (key, rawValue) ->
+                val value = rawValue as? String ?: return@mapNotNull null
+                key.name to value
             }
         overrides.clear()
         overrides.putAll(persisted)
