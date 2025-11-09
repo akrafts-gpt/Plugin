@@ -6,6 +6,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import android.util.Base64
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -23,11 +24,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -38,7 +39,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.ExposedDropdownMenu
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.menuAnchor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -181,7 +186,7 @@ internal fun <T : Any> RemoteConfigDialogContent(
     val pendingFieldValues = remember { mutableStateMapOf<String, String>() }
     val fieldErrors = remember { mutableStateMapOf<String, String>() }
 
-    val fields: List<EditorField<T>> = remember(editor) { editor.fields() }
+    val fields: List<FieldEditor> = remember(editor) { editor.fields() }
 
     val onRawValidated: (T) -> Unit = { decoded ->
         currentState = decoded
@@ -331,41 +336,19 @@ internal fun <T : Any> RemoteConfigDialogContent(
                     }
                 }
             } else {
-                items(items = fields, key = { it.name }) { field ->
-                    when (field.type) {
-                        "kotlin.String" -> StringField(
-                            modifier = Modifier.fillMaxWidth(),
-                            field = field,
-                            state = currentState,
-                            onStateChange = { updated -> currentState = updated }
-                        )
-
-                        "kotlin.Boolean" -> BooleanField(
-                            modifier = Modifier.fillMaxWidth(),
-                            field = field,
-                            state = currentState,
-                            onStateChange = { updated -> currentState = updated }
-                        )
-
-                        "kotlin.Int", "kotlin.Long", "kotlin.Double", "kotlin.Float" -> NumericField(
-                            modifier = Modifier.fillMaxWidth(),
-                            field = field,
-                            type = field.type,
-                            state = currentState,
-                            pendingValues = pendingFieldValues,
-                            fieldErrors = fieldErrors,
-                            onStateChange = { updated, error ->
-                                if (error == null) {
-                                    currentState = updated
-                                }
-                            }
-                        )
-
-                        else -> UnsupportedField(
-                            modifier = Modifier.fillMaxWidth(),
-                            field = field
-                        )
-                    }
+                item("form_fields") {
+                    FieldEditorsColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        fieldEditors = fields,
+                        state = currentState,
+                        onStateChange = { updated ->
+                            @Suppress("UNCHECKED_CAST")
+                            currentState = updated as T
+                        },
+                        pendingValues = pendingFieldValues,
+                        fieldErrors = fieldErrors,
+                        path = ""
+                    )
                 }
             }
 
@@ -513,12 +496,64 @@ private fun ReadOnlyField(
     }
 }
 
+private enum class NumericType { INT, LONG, FLOAT, DOUBLE }
+
 @Composable
-private fun <T : Any> StringField(
+private fun FieldEditorsColumn(
     modifier: Modifier,
-    field: EditorField<T>,
-    state: T,
-    onStateChange: (T) -> Unit,
+    fieldEditors: List<FieldEditor>,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        fieldEditors.forEachIndexed { index, fieldEditor ->
+            FieldEditorItem(
+                modifier = Modifier.fillMaxWidth(),
+                fieldEditor = fieldEditor,
+                state = state,
+                onStateChange = onStateChange,
+                pendingValues = pendingValues,
+                fieldErrors = fieldErrors,
+                path = buildFieldPath(path, fieldEditor.label, index)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FieldEditorItem(
+    modifier: Modifier,
+    fieldEditor: FieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    when (fieldEditor) {
+        is StringFieldEditor -> StringField(modifier, fieldEditor, state, onStateChange)
+        is BooleanFieldEditor -> BooleanField(modifier, fieldEditor, state, onStateChange)
+        is IntFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.INT)
+        is LongFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.LONG)
+        is FloatFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.FLOAT)
+        is DoubleFieldEditor -> NumericField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path, NumericType.DOUBLE)
+        is EnumFieldEditor -> EnumField(modifier, fieldEditor, state, onStateChange)
+        is ByteArrayFieldEditor -> ByteArrayField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
+        is ClassFieldEditor -> ClassField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
+        is ListFieldEditor -> ListField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
+        is PolymorphicFieldEditor -> PolymorphicField(modifier, fieldEditor, state, onStateChange, pendingValues, fieldErrors, path)
+    }
+}
+
+@Composable
+private fun StringField(
+    modifier: Modifier,
+    field: StringFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
 ) {
     OutlinedTextField(
         modifier = modifier,
@@ -526,16 +561,16 @@ private fun <T : Any> StringField(
         onValueChange = { updated ->
             onStateChange(field.setter(state, updated))
         },
-        label = { Text(field.name) }
+        label = { Text(field.label) }
     )
 }
 
 @Composable
-private fun <T : Any> BooleanField(
+private fun BooleanField(
     modifier: Modifier,
-    field: EditorField<T>,
-    state: T,
-    onStateChange: (T) -> Unit,
+    field: BooleanFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
 ) {
     val value = field.getter(state) as? Boolean ?: false
     Row(
@@ -543,7 +578,7 @@ private fun <T : Any> BooleanField(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        Text(text = field.name, style = MaterialTheme.typography.bodyLarge)
+        Text(text = field.label, style = MaterialTheme.typography.bodyLarge)
         androidx.compose.material3.Switch(
             checked = value,
             onCheckedChange = { checked ->
@@ -554,52 +589,334 @@ private fun <T : Any> BooleanField(
 }
 
 @Composable
-private fun <T : Any> NumericField(
+private fun NumericField(
     modifier: Modifier,
-    field: EditorField<T>,
-    type: String,
-    state: T,
+    field: FieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
     pendingValues: MutableMap<String, String>,
     fieldErrors: MutableMap<String, String>,
-    onStateChange: (T, String?) -> Unit,
+    path: String,
+    type: NumericType,
 ) {
-    val currentDisplay = pendingValues[field.name]
-        ?: (field.getter(state)?.toString() ?: "")
+    val key = path
+    val currentText = pendingValues[key] ?: (field.getter(state)?.toString() ?: "")
     OutlinedTextField(
         modifier = modifier,
-        value = currentDisplay,
+        value = currentText,
         onValueChange = { updated ->
-            pendingValues[field.name] = updated
+            pendingValues[key] = updated
             val parsed = when (type) {
-                "kotlin.Int" -> updated.toIntOrNull()
-                "kotlin.Long" -> updated.toLongOrNull()
-                "kotlin.Double" -> updated.toDoubleOrNull()
-                "kotlin.Float" -> updated.toFloatOrNull()
-                else -> null
+                NumericType.INT -> updated.toIntOrNull()
+                NumericType.LONG -> updated.toLongOrNull()
+                NumericType.FLOAT -> updated.toFloatOrNull()
+                NumericType.DOUBLE -> updated.toDoubleOrNull()
             }
             if (parsed != null) {
-                pendingValues.remove(field.name)
-                fieldErrors.remove(field.name)
-                onStateChange(field.setter(state, parsed), null)
+                pendingValues.remove(key)
+                fieldErrors.remove(key)
+                onStateChange(field.setter(state, parsed))
             } else {
-                fieldErrors[field.name] = "Invalid number"
-                onStateChange(state, "Invalid number")
+                fieldErrors[key] = "Invalid number"
             }
         },
-        label = { Text(field.name) },
-        isError = fieldErrors.containsKey(field.name),
+        label = { Text(fieldLabel(path, field)) },
+        isError = fieldErrors.containsKey(key),
         supportingText = {
-            fieldErrors[field.name]?.let { Text(it) }
+            fieldErrors[key]?.let { Text(it) }
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun UnsupportedField(
+private fun EnumField(
     modifier: Modifier,
-    field: EditorField<*>,
+    field: EnumFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
 ) {
+    var expanded by remember { mutableStateOf(false) }
+    val options = field.values
+    val selected = field.getter(state) as? Enum<*>
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            modifier = Modifier.menuAnchor().fillMaxWidth(),
+            readOnly = true,
+            value = selected?.name ?: "",
+            onValueChange = {},
+            label = { Text(field.label) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name) },
+                    onClick = {
+                        expanded = false
+                        onStateChange(field.setter(state, option))
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ByteArrayField(
+    modifier: Modifier,
+    field: ByteArrayFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    val key = path
+    val existing = pendingValues[key] ?: ((field.getter(state) as? ByteArray)?.let { Base64.encodeToString(it, Base64.NO_WRAP) } ?: "")
+    OutlinedTextField(
+        modifier = modifier,
+        value = existing,
+        onValueChange = { updated ->
+            pendingValues[key] = updated
+            if (updated.isBlank()) {
+                pendingValues.remove(key)
+                fieldErrors.remove(key)
+                onStateChange(field.setter(state, ByteArray(0)))
+            } else {
+                val decoded = runCatching { Base64.decode(updated, Base64.DEFAULT) }.getOrNull()
+                if (decoded != null) {
+                    pendingValues.remove(key)
+                    fieldErrors.remove(key)
+                    onStateChange(field.setter(state, decoded))
+                } else {
+                    fieldErrors[key] = "Invalid Base64"
+                }
+            }
+        },
+        label = { Text(fieldLabel(path, field)) },
+        isError = fieldErrors.containsKey(key),
+        supportingText = {
+            fieldErrors[key]?.let { Text(it) }
+        }
+    )
+}
+
+@Composable
+private fun ClassField(
+    modifier: Modifier,
+    field: ClassFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    val nestedState = field.getter(state) ?: return UnsupportedField(modifier, field::class.java.simpleName)
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
+            FieldEditorsColumn(
+                modifier = Modifier.fillMaxWidth(),
+                fieldEditors = field.nestedFieldEditors,
+                state = nestedState,
+                onStateChange = { updated ->
+                    onStateChange(field.setter(state, updated))
+                },
+                pendingValues = pendingValues,
+                fieldErrors = fieldErrors,
+                path = path
+            )
+        }
+    }
+}
+
+@Composable
+private fun ListField(
+    modifier: Modifier,
+    field: ListFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    var items by remember(state) {
+        mutableStateOf((field.getter(state) as? List<*>)?.map { it ?: field.defaultItemProvider() } ?: emptyList())
+    }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
+            items.forEachIndexed { index, item ->
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    tonalElevation = 1.dp,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(text = "Item ${index + 1}", style = MaterialTheme.typography.titleSmall)
+                            TextButton(onClick = {
+                                val updated = items.toMutableList().apply { removeAt(index) }
+                                items = updated
+                                val itemPath = buildFieldPath(path, field.label, index)
+                                clearFieldStateForPath(itemPath, pendingValues, fieldErrors)
+                                onStateChange(field.setter(state, updated))
+                            }) {
+                                Text("Remove")
+                            }
+                        }
+                        FieldEditorItem(
+                            modifier = Modifier.fillMaxWidth(),
+                            fieldEditor = field.itemEditor,
+                            state = item ?: field.defaultItemProvider().orEmptyDefault(),
+                            onStateChange = { updatedItem ->
+                                val updated = items.toMutableList().apply { this[index] = updatedItem }
+                                items = updated
+                                onStateChange(field.setter(state, updated))
+                            },
+                            pendingValues = pendingValues,
+                            fieldErrors = fieldErrors,
+                            path = buildFieldPath(path, field.label, index)
+                        )
+                    }
+                }
+            }
+            OutlinedButton(onClick = {
+                val newItem = field.defaultItemProvider() ?: return@OutlinedButton
+                val updated = items + newItem
+                items = updated
+                onStateChange(field.setter(state, updated))
+            }) {
+                Text("Add Item")
+            }
+        }
+    }
+}
+
+@Composable
+private fun PolymorphicField(
+    modifier: Modifier,
+    field: PolymorphicFieldEditor,
+    state: Any,
+    onStateChange: (Any) -> Unit,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>,
+    path: String,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selectedClass by remember(state) {
+        mutableStateOf(field.getter(state)?.let { it::class } ?: field.subclasses.firstOrNull())
+    }
+    var selectedValue by remember(state) { mutableStateOf(field.getter(state)) }
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(text = field.label, style = MaterialTheme.typography.titleMedium)
+
+            if (field.subclasses.isEmpty()) {
+                Text("No subclasses available", color = MaterialTheme.colorScheme.error)
+                return@Column
+            }
+
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded }
+            ) {
+                OutlinedTextField(
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    readOnly = true,
+                    value = selectedClass?.simpleName ?: "",
+                    onValueChange = {},
+                    label = { Text("Type") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    field.subclasses.forEach { subclass ->
+                        DropdownMenuItem(
+                            text = { Text(subclass.simpleName ?: subclass.toString()) },
+                            onClick = {
+                                expanded = false
+                                selectedClass = subclass
+                                val newInstance = field.defaultInstanceProvider(subclass)
+                                selectedValue = newInstance
+                                if (newInstance != null) {
+                                    onStateChange(field.setter(state, newInstance))
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            val clazz = selectedClass
+            val value = selectedValue
+            if (clazz != null && value != null) {
+                FieldEditorsColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    fieldEditors = field.nestedFieldEditorsProvider(clazz),
+                    state = value,
+                    onStateChange = { updated ->
+                        selectedValue = updated
+                        onStateChange(field.setter(state, updated))
+                    },
+                    pendingValues = pendingValues,
+                    fieldErrors = fieldErrors,
+                    path = buildFieldPath(path, clazz.simpleName ?: "type")
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnsupportedField(modifier: Modifier, reason: String) {
     Surface(
         modifier = modifier,
         shape = RoundedCornerShape(12.dp),
@@ -607,10 +924,33 @@ private fun UnsupportedField(
         tonalElevation = 1.dp
     ) {
         Text(
-            text = "Unsupported field type ${field.type}. Edit using JSON mode.",
+            text = "Unsupported field ($reason). Edit using JSON mode.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(12.dp)
         )
     }
+}
+
+private fun buildFieldPath(parent: String, label: String, index: Int? = null): String {
+    val sanitized = label.replace(" ", "_")
+    val withIndex = index?.let { "$sanitized#$it" } ?: sanitized
+    return if (parent.isBlank()) withIndex else "$parent.$withIndex"
+}
+
+private fun fieldLabel(path: String, field: FieldEditor): String {
+    return field.label.ifBlank { path.substringAfterLast('.') }
+}
+
+private fun Any?.orEmptyDefault(): Any = this ?: ""
+
+private fun clearFieldStateForPath(
+    prefix: String,
+    pendingValues: MutableMap<String, String>,
+    fieldErrors: MutableMap<String, String>
+) {
+    val pendingKeys = pendingValues.keys.filter { it.startsWith(prefix) }
+    pendingKeys.forEach { pendingValues.remove(it) }
+    val errorKeys = fieldErrors.keys.filter { it.startsWith(prefix) }
+    errorKeys.forEach { fieldErrors.remove(it) }
 }
