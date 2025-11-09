@@ -512,7 +512,7 @@ private class EditorGenerator(
                     .add("%T(\n", CLASS_FIELD_EDITOR).indent()
                     .add("label = %S,\n", label)
                     .add("getter = { it },\n")
-                    .add("setter = { _, value -> value },\n")
+                    .add("setter = { _, value -> value as %T },\n", itemTypeName)
                     .add("nestedFieldEditors = %L\n", nestedEditors)
                     .unindent().add(")")
                     .build()
