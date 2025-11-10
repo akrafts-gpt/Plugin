@@ -34,3 +34,9 @@ jobs:
             :processor:runtime:assembleDebug \
             :sample:app:assembleDebug \
             :sample:app:testDebugUnitTest
+      - name: Upload sample debug build
+        uses: actions/upload-artifact@v4
+        with:
+          name: sample-app-debug
+          path: sample/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
