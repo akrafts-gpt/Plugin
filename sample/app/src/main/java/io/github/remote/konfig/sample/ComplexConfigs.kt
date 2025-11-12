@@ -103,7 +103,15 @@ sealed interface SampleResponse
 data class SampleResponseC(val amount: Long) : SampleResponse
 
 @Serializable
-data class SampleResponseD(val data: ByteArray) : SampleResponse
+data class SampleResponseD(val data: ByteArray) : SampleResponse {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SampleResponseD) return false
+        return data.contentEquals(other.data)
+    }
+
+    override fun hashCode(): Int = data.contentHashCode()
+}
 
 @Serializable
 @HiltRemoteConfig("sample_message_envelope")

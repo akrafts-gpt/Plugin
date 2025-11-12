@@ -1086,7 +1086,15 @@ private data class SampleChoiceConfig(
 )
 
 @Serializable
-private data class SampleResponseD(val data: ByteArray)
+private data class SampleResponseD(val data: ByteArray) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SampleResponseD) return false
+        return data.contentEquals(other.data)
+    }
+
+    override fun hashCode(): Int = data.contentHashCode()
+}
 
 // endregion
 
