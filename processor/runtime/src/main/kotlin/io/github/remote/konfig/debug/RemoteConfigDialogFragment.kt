@@ -288,8 +288,17 @@ internal fun <T : Any> RemoteConfigEditorScreen(
         showRawJson = newMode
     }
 
+    val displayTitle = title
+        .takeUnless { it.equals(configKey, ignoreCase = true) }
+        ?.replace(configKey, "", ignoreCase = true)
+        ?.trim()
+        ?.trimStart('-', ':')
+        ?.trim()
+    val shouldShowTitle = !displayTitle.isNullOrBlank()
+
     EditorDialog(
-        title = title,
+        title = displayTitle.orEmpty(),
+        showTitle = shouldShowTitle,
         onDismiss = onDismiss,
         onSave = {
             val payload = getCurrentJson()
@@ -474,6 +483,7 @@ private fun CreateNewConfigDialog(
 @Composable
 private fun EditorDialog(
     title: String,
+    showTitle: Boolean,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
     onShare: () -> Unit,
@@ -499,14 +509,21 @@ private fun EditorDialog(
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_button")) {
                 Text("Cancel")
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .testTag("title"),
-                textAlign = TextAlign.Center
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                if (showTitle) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
+                }
+            }
             if (isRawMode) {
                 Button(onClick = onShare, enabled = isConfirmEnabled, modifier = Modifier.testTag("share_button")) {
                     Text("Share")
@@ -1544,6 +1561,7 @@ private fun PreviewEditorDialog() {
     PreviewSurface {
         EditorDialog(
             title = "Preview Editor",
+            showTitle = true,
             onDismiss = {},
             onSave = {},
             onShare = {},
