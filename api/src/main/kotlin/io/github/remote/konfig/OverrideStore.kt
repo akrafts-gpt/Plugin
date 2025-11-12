@@ -28,31 +28,39 @@ import org.json.JSONObject
 class OverrideStore @JvmOverloads constructor(
     context: Context? = null,
     private val scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    private val developmentMode: Boolean = true,
 ) {
     private val overrides = ConcurrentHashMap<String, String>()
     private val blobKey = stringPreferencesKey(STORED_BLOB_KEY)
 
-    private val dataStore: DataStore<Preferences>? = context?.let { appContext ->
-        PreferenceDataStoreFactory.create(
-            scope = scope,
-            produceFile = { appContext.preferencesDataStoreFile(DATASTORE_FILE_NAME) }
-        ).also { store ->
-            runBlocking {
-                val initial = withContext(Dispatchers.IO) { store.data.first() }
-                applySnapshot(initial)
-            }
-            scope.launch {
-                store.data.collect { prefs ->
-                    applySnapshot(prefs)
+    private val dataStore: DataStore<Preferences>? = if (developmentMode) {
+        context?.let { appContext ->
+            PreferenceDataStoreFactory.create(
+                scope = scope,
+                produceFile = { appContext.preferencesDataStoreFile(DATASTORE_FILE_NAME) }
+            ).also { store ->
+                runBlocking {
+                    val initial = withContext(Dispatchers.IO) { store.data.first() }
+                    applySnapshot(initial)
+                }
+                scope.launch {
+                    store.data.collect { prefs ->
+                        applySnapshot(prefs)
+                    }
                 }
             }
         }
+    } else {
+        null
     }
 
     /**
      * Returns the override value for [key] if present.
      */
-    fun get(key: String): String? = overrides[key]
+    fun get(key: String): String? {
+        if (!developmentMode) return null
+        return overrides[key]
+    }
 
     fun getOverride(key: String): String? = get(key)
 
@@ -60,6 +68,7 @@ class OverrideStore @JvmOverloads constructor(
      * Adds or replaces the override [value] for [key].
      */
     fun put(key: String, value: String) {
+        if (!developmentMode) return
         overrides[key] = value
         persistOverrides()
     }
@@ -72,6 +81,7 @@ class OverrideStore @JvmOverloads constructor(
      * Removes the override entry for [key].
      */
     fun remove(key: String) {
+        if (!developmentMode) return
         overrides.remove(key)
         persistOverrides()
     }
@@ -84,6 +94,7 @@ class OverrideStore @JvmOverloads constructor(
      * Clears all stored overrides.
      */
     fun clear() {
+        if (!developmentMode) return
         overrides.clear()
         persistOverrides()
     }
@@ -100,6 +111,7 @@ class OverrideStore @JvmOverloads constructor(
     }
 
     private fun persistOverrides() {
+        if (!developmentMode) return
         val snapshot = overrides.toMap()
         dataStore?.let { store ->
             scope.launch {
@@ -137,5 +149,22 @@ class OverrideStore @JvmOverloads constructor(
     private companion object {
         private const val DATASTORE_FILE_NAME = "remote_config_overrides"
         private const val STORED_BLOB_KEY = "__overrides_blob__"
+    }
+
+    companion object {
+        /**
+         * Returns the default override store implementation. The returned instance persists
+         * overrides when [developmentMode] is `true` and becomes a no-op otherwise.
+         */
+        @JvmStatic
+        fun default(
+            context: Context,
+            developmentMode: Boolean,
+        ): OverrideStore {
+            return OverrideStore(
+                context = context,
+                developmentMode = developmentMode,
+            )
+        }
     }
 }

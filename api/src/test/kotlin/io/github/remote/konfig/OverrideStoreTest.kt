@@ -26,4 +26,19 @@ class OverrideStoreTest {
         store.clear()
         assertNull(store.get("welcome"))
     }
+
+    @Test
+    fun disabledStoreIgnoresOverrides() {
+        val store = OverrideStore(developmentMode = false)
+
+        store.put("welcome", "ignored")
+        assertNull(store.get("welcome"))
+
+        store.setOverride("welcome", "ignored")
+        assertNull(store.getOverride("welcome"))
+
+        store.remove("welcome")
+        store.clearOverride("welcome")
+        store.clear()
+    }
 }

@@ -25,7 +25,10 @@ abstract class RcProviderModule {
         fun provideOverrideStore(
             @ApplicationContext context: Context,
         ): OverrideStore {
-            return OverrideStore(context)
+            return OverrideStore.default(
+                context = context,
+                developmentMode = BuildConfig.DEBUG,
+            )
         }
     }
 }
