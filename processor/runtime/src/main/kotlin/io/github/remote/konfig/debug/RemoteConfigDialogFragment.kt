@@ -57,6 +57,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
 import androidx.fragment.app.DialogFragment
@@ -64,9 +65,15 @@ import io.github.remote.konfig.OverrideStore
 import io.github.remote.konfig.RemoteConfigProvider
 import kotlin.reflect.KClass
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Polymorphic
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.modules.SerializersModule
+import kotlinx.serialization.modules.polymorphic
+import kotlinx.serialization.modules.subclass
 import javax.inject.Inject
 
 /**
@@ -905,3 +912,786 @@ private fun PolymorphicField(
         }
     }
 }
+
+// region Preview support data
+
+@Composable
+private fun PreviewSurface(content: @Composable () -> Unit) {
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        Box(
+            modifier = Modifier
+                .background(MaterialTheme.colorScheme.surface)
+                .padding(16.dp)
+        ) {
+            content()
+        }
+    }
+}
+
+private val PreviewSerializersModule: SerializersModule = SerializersModule {
+    polymorphic(SampleChoiceVariant::class) {
+        subclass(SampleChoiceVariant.Baseline::class)
+        subclass(SampleChoiceVariant.TestVariant::class)
+    }
+}
+
+private val PreviewJson: Json = Json {
+    prettyPrint = true
+    ignoreUnknownKeys = true
+    serializersModule = PreviewSerializersModule
+}
+
+@Serializable
+private enum class SampleEnum {
+    OPTION_A,
+    OPTION_B,
+    OPTION_C,
+}
+
+@Serializable
+private enum class SampleOption {
+    OPTION_ONE,
+    OPTION_TWO,
+    OPTION_THREE,
+}
+
+@Serializable
+private enum class SampleChoiceImage {
+    @SerialName("CROWN")
+    CROWN,
+}
+
+@Serializable
+private enum class SampleChoiceBulletIcon {
+    @SerialName("BELL")
+    BELL,
+
+    @SerialName("SHIELD")
+    SHIELD,
+
+    @SerialName("ROCKET")
+    ROCKET,
+}
+
+@Serializable
+private enum class SkipBehavior(val skipStart: Boolean, val skipMiddle: Boolean) {
+    SkippableStart(true, false),
+    SkippableMiddle(false, true),
+    SkippableStartMiddle(true, true),
+    NotSkippable(false, false),
+}
+
+@Serializable
+private data class PreviewNestedItem(
+    val nestedString: String,
+    val nestedBool: Boolean,
+)
+
+@Serializable
+private data class SamplePreviewConfig(
+    val title: String,
+    val enabled: Boolean,
+    val maxItems: Int,
+    val expirationMillis: Long,
+    val selection: SampleEnum,
+    val nested: PreviewNestedItem,
+    val nestedList: List<PreviewNestedItem>,
+)
+
+@Serializable
+private data class SampleEntry(
+    val label: String,
+    val highlighted: Boolean,
+)
+
+@Serializable
+private data class SampleDetails(
+    val label: String,
+    val highlighted: Boolean,
+    val summary: SampleEntry,
+)
+
+@Serializable
+private data class SampleDeeplyNestedConfig(
+    val title: String,
+    val contactNumber: String,
+    val provider: String,
+    val region: String,
+    val lastUpdatedEpochMillis: Long,
+    val option: SampleOption,
+    val mode: SkipBehavior,
+    val enabled: Boolean,
+    val detail: SampleDetails,
+    val entries: List<SampleEntry>,
+    val tags: List<String>,
+)
+
+@Serializable
+private data class SampleBulletPoint(
+    val icon: SampleChoiceBulletIcon,
+    val title: String,
+    val description: String,
+)
+
+@Serializable
+private data class SampleTier(
+    val pretext: String,
+    val title: String,
+    val cta: String,
+    val isFree: Boolean,
+    val image: SampleChoiceImage,
+    val points: List<SampleBulletPoint>,
+    val description: String,
+)
+
+@Serializable
+private sealed interface SampleChoiceVariant {
+    val variant: String
+    val experimentName: String
+
+    @Serializable
+    @SerialName("Baseline")
+    data class Baseline(
+        override val variant: String,
+        override val experimentName: String,
+    ) : SampleChoiceVariant
+
+    @Serializable
+    @SerialName("TestVariant")
+    data class TestVariant(
+        override val variant: String,
+        override val experimentName: String,
+        val tier1: SampleTier,
+        val tier2: SampleTier,
+    ) : SampleChoiceVariant
+}
+
+@Serializable
+private data class SampleChoiceConfig(
+    @Polymorphic val value: SampleChoiceVariant,
+)
+
+@Serializable
+private data class SampleResponseD(val data: ByteArray)
+
+// endregion
+
+// region Preview helpers
+
+private fun samplePreviewConfig(): SamplePreviewConfig = SamplePreviewConfig(
+    title = "Preview Title",
+    enabled = true,
+    maxItems = 3,
+    expirationMillis = 1_700_000_000_000L,
+    selection = SampleEnum.OPTION_B,
+    nested = PreviewNestedItem(nestedString = "Nested label", nestedBool = true),
+    nestedList = listOf(
+        PreviewNestedItem(nestedString = "Nested child 1", nestedBool = false),
+        PreviewNestedItem(nestedString = "Nested child 2", nestedBool = true)
+    )
+)
+
+private fun sampleDeeplyNestedConfig(): SampleDeeplyNestedConfig = SampleDeeplyNestedConfig(
+    title = "Deeply Nested",
+    contactNumber = "+1-555-0100",
+    provider = "Provider Inc.",
+    region = "US",
+    lastUpdatedEpochMillis = 1_700_000_000_000L,
+    option = SampleOption.OPTION_TWO,
+    mode = SkipBehavior.SkippableStartMiddle,
+    enabled = true,
+    detail = SampleDetails(
+        label = "Important Detail",
+        highlighted = true,
+        summary = SampleEntry(label = "Summary", highlighted = false)
+    ),
+    entries = listOf(
+        SampleEntry(label = "First entry", highlighted = true),
+        SampleEntry(label = "Second entry", highlighted = false)
+    ),
+    tags = listOf("beta", "rollout", "android")
+)
+
+private fun sampleChoiceConfig(): SampleChoiceConfig = SampleChoiceConfig(
+    value = SampleChoiceVariant.TestVariant(
+        variant = "Gold",
+        experimentName = "Experiment Gold",
+        tier1 = sampleTier("Tier 1", isFree = true),
+        tier2 = sampleTier("Tier 2", isFree = false)
+    )
+)
+
+private fun sampleTier(name: String, isFree: Boolean): SampleTier = SampleTier(
+    pretext = "Exclusive",
+    title = name,
+    cta = "Start now",
+    isFree = isFree,
+    image = SampleChoiceImage.CROWN,
+    points = sampleBulletPoints(name),
+    description = "$name benefits"
+)
+
+private fun sampleBulletPoints(prefix: String): List<SampleBulletPoint> = listOf(
+    SampleBulletPoint(
+        icon = SampleChoiceBulletIcon.BELL,
+        title = "$prefix notification",
+        description = "Stay informed about $prefix"
+    ),
+    SampleBulletPoint(
+        icon = SampleChoiceBulletIcon.SHIELD,
+        title = "$prefix protection",
+        description = "Extra safety for $prefix"
+    ),
+    SampleBulletPoint(
+        icon = SampleChoiceBulletIcon.ROCKET,
+        title = "$prefix boost",
+        description = "Accelerate growth with $prefix"
+    )
+)
+
+private fun sampleEntryFieldEditors(): List<FieldEditor> = listOf(
+    StringFieldEditor(
+        label = "label",
+        getter = { (it as SampleEntry).label },
+        setter = { state, value -> (state as SampleEntry).copy(label = value as String) }
+    ),
+    BooleanFieldEditor(
+        label = "highlighted",
+        getter = { (it as SampleEntry).highlighted },
+        setter = { state, value -> (state as SampleEntry).copy(highlighted = value as Boolean) }
+    )
+)
+
+private fun sampleDetailsFieldEditor(): ClassFieldEditor = ClassFieldEditor(
+    label = "detail",
+    getter = { (it as SampleDeeplyNestedConfig).detail },
+    setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(detail = value as SampleDetails) },
+    nestedFieldEditors = listOf(
+        StringFieldEditor(
+            label = "label",
+            getter = { (it as SampleDetails).label },
+            setter = { state, value -> (state as SampleDetails).copy(label = value as String) }
+        ),
+        BooleanFieldEditor(
+            label = "highlighted",
+            getter = { (it as SampleDetails).highlighted },
+            setter = { state, value -> (state as SampleDetails).copy(highlighted = value as Boolean) }
+        ),
+        ClassFieldEditor(
+            label = "summary",
+            getter = { (it as SampleDetails).summary },
+            setter = { state, value -> (state as SampleDetails).copy(summary = value as SampleEntry) },
+            nestedFieldEditors = sampleEntryFieldEditors()
+        )
+    )
+)
+
+private fun sampleEntriesFieldEditor(): ListFieldEditor = ListFieldEditor(
+    label = "entries",
+    getter = { (it as SampleDeeplyNestedConfig).entries },
+    setter = { state, value ->
+        val typed = (value as? List<*>)?.mapNotNull { it as? SampleEntry } ?: emptyList()
+        (state as SampleDeeplyNestedConfig).copy(entries = typed)
+    },
+    defaultItemProvider = { SampleEntry(label = "New entry", highlighted = false) },
+    itemEditor = ClassFieldEditor(
+        label = "entry",
+        getter = { it as? SampleEntry },
+        setter = { _, value -> value as? SampleEntry ?: SampleEntry(label = "", highlighted = false) },
+        nestedFieldEditors = sampleEntryFieldEditors()
+    )
+)
+
+private fun sampleTagsFieldEditor(): ListFieldEditor = ListFieldEditor(
+    label = "tags",
+    getter = { (it as SampleDeeplyNestedConfig).tags },
+    setter = { state, value ->
+        val typed = (value as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
+        (state as SampleDeeplyNestedConfig).copy(tags = typed)
+    },
+    defaultItemProvider = { "" },
+    itemEditor = StringFieldEditor(
+        label = "tag",
+        getter = { it as? String ?: "" },
+        setter = { _, value -> value as? String ?: "" }
+    )
+)
+
+private fun sampleBulletPointEditors(): List<FieldEditor> = listOf(
+    EnumFieldEditor(
+        label = "icon",
+        getter = { (it as SampleBulletPoint).icon },
+        setter = { state, value -> (state as SampleBulletPoint).copy(icon = value as SampleChoiceBulletIcon) },
+        values = SampleChoiceBulletIcon.values().toList()
+    ),
+    StringFieldEditor(
+        label = "title",
+        getter = { (it as SampleBulletPoint).title },
+        setter = { state, value -> (state as SampleBulletPoint).copy(title = value as String) }
+    ),
+    StringFieldEditor(
+        label = "description",
+        getter = { (it as SampleBulletPoint).description },
+        setter = { state, value -> (state as SampleBulletPoint).copy(description = value as String) }
+    )
+)
+
+private fun sampleTierFieldEditors(): List<FieldEditor> = listOf(
+    StringFieldEditor(
+        label = "pretext",
+        getter = { (it as SampleTier).pretext },
+        setter = { state, value -> (state as SampleTier).copy(pretext = value as String) }
+    ),
+    StringFieldEditor(
+        label = "title",
+        getter = { (it as SampleTier).title },
+        setter = { state, value -> (state as SampleTier).copy(title = value as String) }
+    ),
+    StringFieldEditor(
+        label = "cta",
+        getter = { (it as SampleTier).cta },
+        setter = { state, value -> (state as SampleTier).copy(cta = value as String) }
+    ),
+    BooleanFieldEditor(
+        label = "isFree",
+        getter = { (it as SampleTier).isFree },
+        setter = { state, value -> (state as SampleTier).copy(isFree = value as Boolean) }
+    ),
+    EnumFieldEditor(
+        label = "image",
+        getter = { (it as SampleTier).image },
+        setter = { state, value -> (state as SampleTier).copy(image = value as SampleChoiceImage) },
+        values = SampleChoiceImage.values().toList()
+    ),
+    ListFieldEditor(
+        label = "points",
+        getter = { (it as SampleTier).points },
+        setter = { state, value ->
+            val typed = (value as? List<*>)?.mapNotNull { it as? SampleBulletPoint } ?: emptyList()
+            (state as SampleTier).copy(points = typed)
+        },
+        defaultItemProvider = { SampleBulletPoint(SampleChoiceBulletIcon.BELL, "Point", "Description") },
+        itemEditor = ClassFieldEditor(
+            label = "point",
+            getter = { it as? SampleBulletPoint },
+            setter = { _, value -> value as? SampleBulletPoint ?: SampleBulletPoint(SampleChoiceBulletIcon.BELL, "", "") },
+            nestedFieldEditors = sampleBulletPointEditors()
+        )
+    ),
+    StringFieldEditor(
+        label = "description",
+        getter = { (it as SampleTier).description },
+        setter = { state, value -> (state as SampleTier).copy(description = value as String) }
+    )
+)
+
+private fun sampleChoiceVariantEditors(clazz: KClass<*>): List<FieldEditor> = when (clazz) {
+    SampleChoiceVariant.Baseline::class -> listOf(
+        StringFieldEditor(
+            label = "variant",
+            getter = { (it as SampleChoiceVariant.Baseline).variant },
+            setter = { state, value -> (state as SampleChoiceVariant.Baseline).copy(variant = value as String) }
+        ),
+        StringFieldEditor(
+            label = "experimentName",
+            getter = { (it as SampleChoiceVariant.Baseline).experimentName },
+            setter = { state, value -> (state as SampleChoiceVariant.Baseline).copy(experimentName = value as String) }
+        )
+    )
+
+    SampleChoiceVariant.TestVariant::class -> listOf(
+        StringFieldEditor(
+            label = "variant",
+            getter = { (it as SampleChoiceVariant.TestVariant).variant },
+            setter = { state, value -> (state as SampleChoiceVariant.TestVariant).copy(variant = value as String) }
+        ),
+        StringFieldEditor(
+            label = "experimentName",
+            getter = { (it as SampleChoiceVariant.TestVariant).experimentName },
+            setter = { state, value -> (state as SampleChoiceVariant.TestVariant).copy(experimentName = value as String) }
+        ),
+        ClassFieldEditor(
+            label = "tier1",
+            getter = { (it as SampleChoiceVariant.TestVariant).tier1 },
+            setter = { state, value -> (state as SampleChoiceVariant.TestVariant).copy(tier1 = value as SampleTier) },
+            nestedFieldEditors = sampleTierFieldEditors()
+        ),
+        ClassFieldEditor(
+            label = "tier2",
+            getter = { (it as SampleChoiceVariant.TestVariant).tier2 },
+            setter = { state, value -> (state as SampleChoiceVariant.TestVariant).copy(tier2 = value as SampleTier) },
+            nestedFieldEditors = sampleTierFieldEditors()
+        )
+    )
+
+    else -> emptyList()
+}
+
+private fun sampleChoiceDefaultInstance(clazz: KClass<*>): SampleChoiceVariant? = when (clazz) {
+    SampleChoiceVariant.Baseline::class -> SampleChoiceVariant.Baseline(
+        variant = "Baseline",
+        experimentName = "Control"
+    )
+
+    SampleChoiceVariant.TestVariant::class -> SampleChoiceVariant.TestVariant(
+        variant = "Test",
+        experimentName = "Experiment A",
+        tier1 = sampleTier("Tier 1", isFree = true),
+        tier2 = sampleTier("Tier 2", isFree = false)
+    )
+
+    else -> null
+}
+
+private object PreviewDeeplyNestedConfigEditor : RemoteConfigEditor<SampleDeeplyNestedConfig> {
+    override val key: String = "sample_deeply_nested"
+
+    override fun defaultInstance(): SampleDeeplyNestedConfig = sampleDeeplyNestedConfig()
+
+    override fun fields(): List<FieldEditor> = listOf(
+        StringFieldEditor(
+            label = "title",
+            getter = { (it as SampleDeeplyNestedConfig).title },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(title = value as String) }
+        ),
+        StringFieldEditor(
+            label = "contactNumber",
+            getter = { (it as SampleDeeplyNestedConfig).contactNumber },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(contactNumber = value as String) }
+        ),
+        StringFieldEditor(
+            label = "provider",
+            getter = { (it as SampleDeeplyNestedConfig).provider },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(provider = value as String) }
+        ),
+        StringFieldEditor(
+            label = "region",
+            getter = { (it as SampleDeeplyNestedConfig).region },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(region = value as String) }
+        ),
+        LongFieldEditor(
+            label = "lastUpdatedEpochMillis",
+            getter = { (it as SampleDeeplyNestedConfig).lastUpdatedEpochMillis },
+            setter = { state, value ->
+                (state as SampleDeeplyNestedConfig).copy(lastUpdatedEpochMillis = (value as Number).toLong())
+            }
+        ),
+        EnumFieldEditor(
+            label = "option",
+            getter = { (it as SampleDeeplyNestedConfig).option },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(option = value as SampleOption) },
+            values = SampleOption.values().toList()
+        ),
+        EnumFieldEditor(
+            label = "mode",
+            getter = { (it as SampleDeeplyNestedConfig).mode },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(mode = value as SkipBehavior) },
+            values = SkipBehavior.values().toList()
+        ),
+        BooleanFieldEditor(
+            label = "enabled",
+            getter = { (it as SampleDeeplyNestedConfig).enabled },
+            setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(enabled = value as Boolean) }
+        ),
+        sampleDetailsFieldEditor(),
+        sampleEntriesFieldEditor(),
+        sampleTagsFieldEditor()
+    )
+}
+
+private object PreviewSampleChoiceConfigEditor : RemoteConfigEditor<SampleChoiceConfig> {
+    override val key: String = "sample_choice_config"
+
+    override val serializersModule: SerializersModule = PreviewSerializersModule
+
+    override fun defaultInstance(): SampleChoiceConfig = sampleChoiceConfig()
+
+    override fun fields(): List<FieldEditor> = listOf(sampleChoiceFieldEditor())
+}
+
+private fun sampleChoiceFieldEditor(): PolymorphicFieldEditor = PolymorphicFieldEditor(
+    label = "value",
+    getter = { (it as SampleChoiceConfig).value },
+    setter = { state, value -> (state as SampleChoiceConfig).copy(value = value as SampleChoiceVariant) },
+    subclasses = listOf(SampleChoiceVariant.Baseline::class, SampleChoiceVariant.TestVariant::class),
+    nestedFieldEditorsProvider = { clazz -> sampleChoiceVariantEditors(clazz) },
+    defaultInstanceProvider = { clazz -> sampleChoiceDefaultInstance(clazz) }
+)
+
+// endregion
+
+// region Preview composables
+
+@Preview(name = "Remote Config - Form")
+@Composable
+private fun PreviewRemoteConfigEditorScreenForm() {
+    val json = PreviewJson
+    val remote = json.encodeToString(SampleDeeplyNestedConfig.serializer(), sampleDeeplyNestedConfig())
+    PreviewSurface {
+        RemoteConfigEditorScreen(
+            title = "Deeply Nested Config",
+            configKey = PreviewDeeplyNestedConfigEditor.key,
+            remoteJson = remote,
+            overrideJson = "",
+            editor = PreviewDeeplyNestedConfigEditor,
+            serializer = SampleDeeplyNestedConfig.serializer(),
+            json = json,
+            onSave = {},
+            onShare = {},
+            onReset = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview(name = "Remote Config - Raw JSON")
+@Composable
+private fun PreviewRemoteConfigEditorScreenRaw() {
+    val json = PreviewJson
+    val remote = json.encodeToString(SampleDeeplyNestedConfig.serializer(), sampleDeeplyNestedConfig())
+    PreviewSurface {
+        RemoteConfigEditorScreen(
+            title = "Deeply Nested Config",
+            configKey = PreviewDeeplyNestedConfigEditor.key,
+            remoteJson = remote,
+            overrideJson = "{invalid json}",
+            editor = PreviewDeeplyNestedConfigEditor,
+            serializer = SampleDeeplyNestedConfig.serializer(),
+            json = json,
+            onSave = {},
+            onShare = {},
+            onReset = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview(name = "Remote Config - Polymorphic")
+@Composable
+private fun PreviewRemoteConfigEditorScreenPolymorphic() {
+    val json = PreviewJson
+    val remote = json.encodeToString(SampleChoiceConfig.serializer(), sampleChoiceConfig())
+    PreviewSurface {
+        RemoteConfigEditorScreen(
+            title = "Choice Config",
+            configKey = PreviewSampleChoiceConfigEditor.key,
+            remoteJson = remote,
+            overrideJson = "",
+            editor = PreviewSampleChoiceConfigEditor,
+            serializer = SampleChoiceConfig.serializer(),
+            json = json,
+            onSave = {},
+            onShare = {},
+            onReset = {},
+            onDismiss = {}
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewCreateNewConfigDialog() {
+    MaterialTheme(colorScheme = darkColorScheme()) {
+        CreateNewConfigDialog(configKey = "sample_key", onConfirm = {}, onDismiss = {})
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewEditorDialog() {
+    PreviewSurface {
+        EditorDialog(
+            title = "Preview Editor",
+            onDismiss = {},
+            onSave = {},
+            onShare = {},
+            isRawMode = false,
+            isConfirmEnabled = true,
+            headerContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(text = "Key: sample_key", style = MaterialTheme.typography.labelLarge)
+                    Text(text = "Source: Remote", style = MaterialTheme.typography.labelMedium)
+                }
+            },
+            mainContent = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = "Main content", style = MaterialTheme.typography.bodyMedium)
+                    ReadOnlyField(label = "Remote", value = "{\n  \"title\": \"Preview\"\n}")
+                }
+            }
+        )
+    }
+}
+
+@Preview
+@Composable
+private fun PreviewReadOnlyField() {
+    PreviewSurface {
+        ReadOnlyField(label = "Remote Value", value = "{\n  \"enabled\": true\n}")
+    }
+}
+
+@Preview(name = "Field Editor Item")
+@Composable
+private fun PreviewFieldEditorItem() {
+    val field = PreviewDeeplyNestedConfigEditor.fields().first()
+    PreviewSurface {
+        FieldEditorItem(
+            modifier = Modifier.fillMaxWidth(),
+            fieldEditor = field,
+            state = sampleDeeplyNestedConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "String Field")
+@Composable
+private fun PreviewStringField() {
+    val field = StringFieldEditor(
+        label = "Title",
+        getter = { (it as SampleDeeplyNestedConfig).title },
+        setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(title = value as String) }
+    )
+    PreviewSurface {
+        StringField(
+            modifier = Modifier.fillMaxWidth(),
+            field = field,
+            state = sampleDeeplyNestedConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "Boolean Field")
+@Composable
+private fun PreviewBooleanField() {
+    val field = BooleanFieldEditor(
+        label = "Enabled",
+        getter = { (it as SampleDeeplyNestedConfig).enabled },
+        setter = { state, value -> (state as SampleDeeplyNestedConfig).copy(enabled = value as Boolean) }
+    )
+    PreviewSurface {
+        BooleanField(
+            modifier = Modifier.fillMaxWidth(),
+            field = field,
+            state = sampleDeeplyNestedConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "Numeric Field")
+@Composable
+private fun PreviewNumericField() {
+    val field = IntFieldEditor(
+        label = "Max Items",
+        getter = { (it as SamplePreviewConfig).maxItems },
+        setter = { state, value -> (state as SamplePreviewConfig).copy(maxItems = (value as Number).toInt()) }
+    )
+    PreviewSurface {
+        NumericField(
+            modifier = Modifier.fillMaxWidth(),
+            field = field,
+            state = samplePreviewConfig(),
+            onStateChange = {},
+            parser = { it.toIntOrNull() }
+        )
+    }
+}
+
+@Preview(name = "Enum Field")
+@Composable
+private fun PreviewEnumField() {
+    val field = EnumFieldEditor(
+        label = "Selection",
+        getter = { (it as SamplePreviewConfig).selection },
+        setter = { state, value -> (state as SamplePreviewConfig).copy(selection = value as SampleEnum) },
+        values = SampleEnum.values().toList()
+    )
+    PreviewSurface {
+        EnumField(
+            modifier = Modifier.fillMaxWidth(),
+            field = field,
+            state = samplePreviewConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "ByteArray Field")
+@Composable
+private fun PreviewByteArrayField() {
+    val field = ByteArrayFieldEditor(
+        label = "Payload",
+        getter = { (it as SampleResponseD).data },
+        setter = { state, value ->
+            (state as SampleResponseD).copy(data = (value as? ByteArray) ?: ByteArray(0))
+        }
+    )
+    PreviewSurface {
+        ByteArrayField(
+            modifier = Modifier.fillMaxWidth(),
+            field = field,
+            state = SampleResponseD(data = "Sample data".encodeToByteArray()),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "Class Field")
+@Composable
+private fun PreviewClassField() {
+    PreviewSurface {
+        ClassField(
+            modifier = Modifier.fillMaxWidth(),
+            field = sampleDetailsFieldEditor(),
+            state = sampleDeeplyNestedConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "List Field")
+@Composable
+private fun PreviewListField() {
+    PreviewSurface {
+        ListField(
+            modifier = Modifier.fillMaxWidth(),
+            field = sampleEntriesFieldEditor(),
+            state = sampleDeeplyNestedConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "List Item View")
+@Composable
+private fun PreviewListItemView() {
+    val field = sampleEntriesFieldEditor()
+    val state = sampleDeeplyNestedConfig()
+    PreviewSurface {
+        ListItemView(
+            index = 0,
+            item = state.entries.first(),
+            field = field,
+            parentState = state,
+            onStateChange = {}
+        )
+    }
+}
+
+@Preview(name = "Polymorphic Field")
+@Composable
+private fun PreviewPolymorphicField() {
+    PreviewSurface {
+        PolymorphicField(
+            modifier = Modifier.fillMaxWidth(),
+            field = sampleChoiceFieldEditor(),
+            state = sampleChoiceConfig(),
+            onStateChange = {}
+        )
+    }
+}
+
+// endregion
