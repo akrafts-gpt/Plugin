@@ -1,5 +1,6 @@
 package io.github.remote.konfig.debug
 
+import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -102,8 +103,9 @@ internal fun RemoteConfigTheme(
  */
 abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
-    @Inject
-    lateinit var overrideStore: OverrideStore
+    private val overrideStore by lazy(LazyThreadSafetyMode.NONE) {
+        createOverrideStore(requireContext().applicationContext)
+    }
 
     @Inject
     lateinit var remoteConfigProvider: RemoteConfigProvider
@@ -115,6 +117,8 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
     protected abstract val serializer: KSerializer<T>
 
     protected abstract val editor: RemoteConfigEditor<T>
+
+    protected open fun createOverrideStore(appContext: Context): OverrideStore = OverrideStore(appContext)
 
     protected open fun createJson(): Json = Json {
         prettyPrint = true
