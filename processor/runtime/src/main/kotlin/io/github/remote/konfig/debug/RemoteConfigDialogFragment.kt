@@ -1,14 +1,18 @@
 package io.github.remote.konfig.debug
 
+import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Base64
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,13 +41,16 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -77,12 +84,28 @@ import kotlinx.serialization.modules.subclass
 import javax.inject.Inject
 
 /**
+ * Applies the Remote Konfig theme supporting both light and dark color schemes.
+ */
+@Composable
+internal fun RemoteConfigTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+    MaterialTheme(colorScheme = colorScheme) {
+        Surface(modifier = Modifier.fillMaxSize(), color = colorScheme.surface) {
+            content()
+        }
+    }
+}
+
+/**
  * Base dialog fragment that renders a Compose-powered editor for a remote config entry.
  */
 abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
-    @Inject
-    lateinit var overrideStore: OverrideStore
+    private val overrideStore: OverrideStore
+        get() = obtainOverrideStore(requireContext().applicationContext)
 
     @Inject
     lateinit var remoteConfigProvider: RemoteConfigProvider
@@ -94,6 +117,17 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
     protected abstract val serializer: KSerializer<T>
 
     protected abstract val editor: RemoteConfigEditor<T>
+
+    protected open fun createOverrideStore(appContext: Context): OverrideStore = OverrideStore(appContext)
+
+    private fun obtainOverrideStore(appContext: Context): OverrideStore {
+        sharedOverrideStore?.let { return it }
+        return synchronized(overrideStoreLock) {
+            sharedOverrideStore ?: createOverrideStore(appContext).also { created ->
+                sharedOverrideStore = created
+            }
+        }
+    }
 
     protected open fun createJson(): Json = Json {
         prettyPrint = true
@@ -122,7 +156,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
         return ComposeView(context).apply {
             setContent {
-                MaterialTheme(colorScheme = darkColorScheme()) {
+                RemoteConfigTheme {
                     RemoteConfigEditorScreen(
                         title = screenTitle,
                         configKey = configKey,
@@ -151,6 +185,19 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                         onDismiss = { dismissAllowingStateLoss() }
                     )
                 }
+            }
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var sharedOverrideStore: OverrideStore? = null
+        private val overrideStoreLock = Any()
+
+        @VisibleForTesting
+        internal fun resetOverrideStore() {
+            synchronized(overrideStoreLock) {
+                sharedOverrideStore = null
             }
         }
     }
@@ -273,8 +320,29 @@ internal fun <T : Any> RemoteConfigEditorScreen(
         showRawJson = newMode
     }
 
+    val displayTitle = title
+        .takeUnless { it.equals(configKey, ignoreCase = true) }
+        ?.replace(configKey, "", ignoreCase = true)
+        ?.let { sanitized ->
+            var result = sanitized.trim()
+            if (result.equals("for", ignoreCase = true)) {
+                result = ""
+            } else if (result.endsWith(" for", ignoreCase = true)) {
+                result = result.dropLast(4).trimEnd()
+            }
+            while (result.endsWith(":") || result.endsWith("-")) {
+                result = result.dropLast(1).trimEnd()
+            }
+            result
+                .trimStart('-', ':')
+                .trim()
+        }
+        ?.takeUnless { it.isBlank() }
+    val shouldShowTitle = !displayTitle.isNullOrBlank()
+
     EditorDialog(
-        title = title,
+        title = displayTitle.orEmpty(),
+        showTitle = shouldShowTitle,
         onDismiss = onDismiss,
         onSave = {
             val payload = getCurrentJson()
@@ -459,6 +527,7 @@ private fun CreateNewConfigDialog(
 @Composable
 private fun EditorDialog(
     title: String,
+    showTitle: Boolean,
     onDismiss: () -> Unit,
     onSave: () -> Unit,
     onShare: () -> Unit,
@@ -484,14 +553,21 @@ private fun EditorDialog(
             TextButton(onClick = onDismiss, modifier = Modifier.testTag("cancel_button")) {
                 Text("Cancel")
             }
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
+            Box(
                 modifier = Modifier
                     .weight(1f)
                     .testTag("title"),
-                textAlign = TextAlign.Center
-            )
+                contentAlignment = Alignment.Center
+            ) {
+                if (showTitle) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2
+                    )
+                }
+            }
             if (isRawMode) {
                 Button(onClick = onShare, enabled = isConfirmEnabled, modifier = Modifier.testTag("share_button")) {
                     Text("Share")
@@ -678,7 +754,8 @@ private fun EnumField(
                     onClick = {
                         expanded = false
                         onStateChange(field.setter(state, value))
-                    }
+                    },
+                    colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface)
                 )
             }
         }
@@ -903,7 +980,8 @@ private fun PolymorphicField(
                             val instance = field.defaultInstanceProvider(subclass)
                             selectedValue = instance
                             onStateChange(field.setter(state, instance))
-                        }
+                        },
+                        colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface)
                     )
                 }
             }
@@ -931,7 +1009,7 @@ private fun PolymorphicField(
 
 @Composable
 private fun PreviewSurface(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    RemoteConfigTheme {
         Box(
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.surface)
@@ -1444,7 +1522,8 @@ private fun sampleChoiceFieldEditor(): PolymorphicFieldEditor = PolymorphicField
 
 // region Preview composables
 
-@Preview(name = "Remote Config - Form")
+@Preview(name = "Remote Config - Form (Light)", showBackground = true)
+@Preview(name = "Remote Config - Form (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenForm() {
     val json = PreviewJson
@@ -1466,7 +1545,8 @@ private fun PreviewRemoteConfigEditorScreenForm() {
     }
 }
 
-@Preview(name = "Remote Config - Raw JSON")
+@Preview(name = "Remote Config - Raw JSON (Light)", showBackground = true)
+@Preview(name = "Remote Config - Raw JSON (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenRaw() {
     val json = PreviewJson
@@ -1488,7 +1568,8 @@ private fun PreviewRemoteConfigEditorScreenRaw() {
     }
 }
 
-@Preview(name = "Remote Config - Polymorphic")
+@Preview(name = "Remote Config - Polymorphic (Light)", showBackground = true)
+@Preview(name = "Remote Config - Polymorphic (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenPolymorphic() {
     val json = PreviewJson
@@ -1510,20 +1591,23 @@ private fun PreviewRemoteConfigEditorScreenPolymorphic() {
     }
 }
 
-@Preview
+@Preview(name = "Create New Config Dialog (Light)", showBackground = true)
+@Preview(name = "Create New Config Dialog (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewCreateNewConfigDialog() {
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    RemoteConfigTheme {
         CreateNewConfigDialog(configKey = "sample_key", onConfirm = {}, onDismiss = {})
     }
 }
 
-@Preview
+@Preview(name = "Editor Dialog (Light)", showBackground = true)
+@Preview(name = "Editor Dialog (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewEditorDialog() {
     PreviewSurface {
         EditorDialog(
             title = "Preview Editor",
+            showTitle = true,
             onDismiss = {},
             onSave = {},
             onShare = {},
@@ -1545,7 +1629,8 @@ private fun PreviewEditorDialog() {
     }
 }
 
-@Preview
+@Preview(name = "Read Only Field (Light)", showBackground = true)
+@Preview(name = "Read Only Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewReadOnlyField() {
     PreviewSurface {
@@ -1553,7 +1638,8 @@ private fun PreviewReadOnlyField() {
     }
 }
 
-@Preview(name = "Field Editor Item")
+@Preview(name = "Field Editor Item (Light)", showBackground = true)
+@Preview(name = "Field Editor Item (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewFieldEditorItem() {
     val field = PreviewDeeplyNestedConfigEditor.fields().first()
@@ -1567,7 +1653,8 @@ private fun PreviewFieldEditorItem() {
     }
 }
 
-@Preview(name = "String Field")
+@Preview(name = "String Field (Light)", showBackground = true)
+@Preview(name = "String Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewStringField() {
     val field = StringFieldEditor(
@@ -1585,7 +1672,8 @@ private fun PreviewStringField() {
     }
 }
 
-@Preview(name = "Boolean Field")
+@Preview(name = "Boolean Field (Light)", showBackground = true)
+@Preview(name = "Boolean Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewBooleanField() {
     val field = BooleanFieldEditor(
@@ -1603,7 +1691,8 @@ private fun PreviewBooleanField() {
     }
 }
 
-@Preview(name = "Numeric Field")
+@Preview(name = "Numeric Field (Light)", showBackground = true)
+@Preview(name = "Numeric Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewNumericField() {
     val field = IntFieldEditor(
@@ -1622,7 +1711,8 @@ private fun PreviewNumericField() {
     }
 }
 
-@Preview(name = "Enum Field")
+@Preview(name = "Enum Field (Light)", showBackground = true)
+@Preview(name = "Enum Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewEnumField() {
     val field = EnumFieldEditor(
@@ -1641,7 +1731,8 @@ private fun PreviewEnumField() {
     }
 }
 
-@Preview(name = "ByteArray Field")
+@Preview(name = "ByteArray Field (Light)", showBackground = true)
+@Preview(name = "ByteArray Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewByteArrayField() {
     val field = ByteArrayFieldEditor(
@@ -1661,7 +1752,8 @@ private fun PreviewByteArrayField() {
     }
 }
 
-@Preview(name = "Class Field")
+@Preview(name = "Class Field (Light)", showBackground = true)
+@Preview(name = "Class Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewClassField() {
     PreviewSurface {
@@ -1674,7 +1766,8 @@ private fun PreviewClassField() {
     }
 }
 
-@Preview(name = "List Field")
+@Preview(name = "List Field (Light)", showBackground = true)
+@Preview(name = "List Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewListField() {
     PreviewSurface {
@@ -1687,7 +1780,8 @@ private fun PreviewListField() {
     }
 }
 
-@Preview(name = "List Item View")
+@Preview(name = "List Item View (Light)", showBackground = true)
+@Preview(name = "List Item View (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewListItemView() {
     val field = sampleEntriesFieldEditor()
@@ -1703,7 +1797,8 @@ private fun PreviewListItemView() {
     }
 }
 
-@Preview(name = "Polymorphic Field")
+@Preview(name = "Polymorphic Field (Light)", showBackground = true)
+@Preview(name = "Polymorphic Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewPolymorphicField() {
     PreviewSurface {
