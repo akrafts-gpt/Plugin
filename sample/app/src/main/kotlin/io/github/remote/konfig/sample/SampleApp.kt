@@ -36,6 +36,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
+import io.github.remote.konfig.HiltRemoteConfig
 import io.github.remote.konfig.RemoteConfigProvider
 import io.github.remote.konfig.RemoteConfigScreen
 import javax.inject.Inject
@@ -56,52 +57,118 @@ abstract class SampleRemoteConfigModule {
     abstract fun bindRemoteConfigProvider(impl: FakeRemoteConfigProvider): RemoteConfigProvider
 }
 
+@Serializable
+@HiltRemoteConfig(DeeplyNestedShowcaseConfig.KEY)
+data class DeeplyNestedShowcaseConfig(
+    val title: String = "Remote Konfig Spotlight",
+    val contactNumber: String = "+1-555-KONFIG",
+    val provider: String = "Remote Konfig",
+    val region: String = "Global",
+    val lastUpdatedEpochMillis: Long = 1_708_565_200_000,
+    val option: SampleOption = SampleOption.OPTION_ONE,
+    val mode: SkipBehavior = SkipBehavior.SkippableStart,
+    val enabled: Boolean = true,
+    val detail: SampleDetails = SampleDetails(
+        label = "New onboarding flow",
+        highlighted = true,
+        summary = SampleEntry(
+            label = "Guided setup",
+            highlighted = true,
+        ),
+    ),
+    val entries: List<SampleEntry> = listOf(
+        SampleEntry(label = "Step 1", highlighted = true),
+        SampleEntry(label = "Step 2", highlighted = false),
+        SampleEntry(label = "Step 3", highlighted = false),
+    ),
+    val tags: List<String> = listOf("beta", "onboarding", "remote-konfig"),
+) {
+    companion object {
+        const val KEY: String = "deeply_nested_showcase"
+    }
+}
+
+@Serializable
+data class SampleDetails(
+    val label: String,
+    val highlighted: Boolean,
+    val summary: SampleEntry,
+)
+
+@Serializable
+data class SampleEntry(
+    val label: String,
+    val highlighted: Boolean,
+)
+
+@Serializable
+enum class SkipBehavior(val skipStart: Boolean, val skipMiddle: Boolean) {
+    @SerialName("SkippableStart")
+    SkippableStart(true, false),
+
+    @SerialName("SkippableMiddle")
+    SkippableMiddle(false, true),
+
+    @SerialName("SkippableStartMiddle")
+    SkippableStartMiddle(true, true),
+
+    @SerialName("NotSkippable")
+    NotSkippable(false, false),
+}
+
+@Serializable
+enum class SampleOption {
+    OPTION_ONE,
+    OPTION_TWO,
+    OPTION_THREE,
+}
+
+@Serializable
+@HiltRemoteConfig(ProfileOptionsConfig.KEY)
+data class ProfileOptionsConfig(
+    val title: String = "Remote Konfig Premium",
+    val contactNumber: String = "+1-555-KONFIG",
+    val provider: String = "Remote Konfig",
+    val region: String = "Global",
+    val lastUpdatedEpochMillis: Long = 1_708_565_200_000,
+    val option: SampleOption = SampleOption.OPTION_TWO,
+) {
+    companion object {
+        const val KEY: String = "profile_options"
+    }
+}
+
+@Serializable
+@HiltRemoteConfig(WelcomeExperienceConfig.KEY)
+data class WelcomeExperienceConfig(
+    val text: String = "Welcome to Remote Konfig!",
+    val enabled: Boolean = true,
+) {
+    companion object {
+        const val KEY: String = "welcome"
+    }
+}
+
 @Singleton
 class FakeRemoteConfigProvider @Inject constructor() : RemoteConfigProvider {
 
     private val json = Json { encodeDefaults = true }
 
     private val remoteConfigs: Map<String, String> = mapOf(
-        WelcomeConfig.KEY to json.encodeToString(
-            WelcomeConfig(
+        WelcomeExperienceConfig.KEY to json.encodeToString(
+            WelcomeExperienceConfig(
                 text = "Welcome to Remote Konfig!",
                 enabled = true,
             )
         ),
-        SampleProfileWithOptionConfig.KEY to json.encodeToString(
-            SampleProfileWithOptionConfig(
+        ProfileOptionsConfig.KEY to json.encodeToString(
+            ProfileOptionsConfig(
                 title = "Remote Konfig Premium",
                 contactNumber = "+1-555-KONFIG",
                 provider = "Remote Konfig",
                 region = "Global",
                 lastUpdatedEpochMillis = 1_708_565_200_000,
                 option = SampleOption.OPTION_TWO,
-            )
-        ),
-        SampleDeeplyNestedConfig.KEY to json.encodeToString(
-            SampleDeeplyNestedConfig(
-                title = "Remote Konfig Spotlight",
-                contactNumber = "+1-555-KONFIG",
-                provider = "Remote Konfig",
-                region = "Global",
-                lastUpdatedEpochMillis = 1_708_565_200_000,
-                option = SampleOption.OPTION_ONE,
-                mode = SkipBehavior.SkippableStart,
-                enabled = true,
-                detail = SampleDetails(
-                    label = "New onboarding flow",
-                    highlighted = true,
-                    summary = SampleEntry(
-                        label = "Guided setup",
-                        highlighted = true,
-                    ),
-                ),
-                entries = listOf(
-                    SampleEntry(label = "Step 1", highlighted = true),
-                    SampleEntry(label = "Step 2", highlighted = false),
-                    SampleEntry(label = "Step 3", highlighted = false),
-                ),
-                tags = listOf("beta", "onboarding", "remote-konfig"),
             )
         ),
     )
@@ -249,17 +316,17 @@ private data class RemoteConfigMetadata(
 )
 
 private val SampleScreenMetadata = mapOf(
-    SampleDeeplyNestedConfig.KEY to RemoteConfigMetadata(
-        typeName = SampleDeeplyNestedConfig::class.simpleName ?: "SampleDeeplyNestedConfig",
-        key = SampleDeeplyNestedConfig.KEY,
+    DeeplyNestedShowcaseConfig.KEY to RemoteConfigMetadata(
+        typeName = DeeplyNestedShowcaseConfig::class.simpleName ?: "DeeplyNestedShowcaseConfig",
+        key = DeeplyNestedShowcaseConfig.KEY,
     ),
-    WelcomeConfig.KEY to RemoteConfigMetadata(
-        typeName = WelcomeConfig::class.simpleName ?: "WelcomeConfig",
-        key = WelcomeConfig.KEY,
+    WelcomeExperienceConfig.KEY to RemoteConfigMetadata(
+        typeName = WelcomeExperienceConfig::class.simpleName ?: "WelcomeExperienceConfig",
+        key = WelcomeExperienceConfig.KEY,
     ),
-    SampleProfileWithOptionConfig.KEY to RemoteConfigMetadata(
-        typeName = SampleProfileWithOptionConfig::class.simpleName ?: "SampleProfileWithOptionConfig",
-        key = SampleProfileWithOptionConfig.KEY,
+    ProfileOptionsConfig.KEY to RemoteConfigMetadata(
+        typeName = ProfileOptionsConfig::class.simpleName ?: "ProfileOptionsConfig",
+        key = ProfileOptionsConfig.KEY,
     ),
 )
 
@@ -315,85 +382,4 @@ fun SampleAppTheme(content: @Composable () -> Unit) {
         typography = SampleTypography,
         content = content,
     )
-}
-
-@Serializable
-@HiltRemoteConfig(SampleDeeplyNestedConfig.KEY)
-data class SampleDeeplyNestedConfig(
-    val title: String,
-    val contactNumber: String,
-    val provider: String,
-    val region: String,
-    val lastUpdatedEpochMillis: Long,
-    val option: SampleOption,
-    val mode: SkipBehavior,
-    val enabled: Boolean,
-    val detail: SampleDetails,
-    val entries: List<SampleEntry>,
-    val tags: List<String>,
-) {
-    companion object {
-        const val KEY: String = "sample_deeply_nested"
-    }
-}
-
-@Serializable
-data class SampleDetails(
-    val label: String,
-    val highlighted: Boolean,
-    val summary: SampleEntry,
-)
-
-@Serializable
-data class SampleEntry(
-    val label: String,
-    val highlighted: Boolean,
-)
-
-@Serializable
-enum class SkipBehavior(val skipStart: Boolean, val skipMiddle: Boolean) {
-    @SerialName("SkippableStart")
-    SkippableStart(true, false),
-
-    @SerialName("SkippableMiddle")
-    SkippableMiddle(false, true),
-
-    @SerialName("SkippableStartMiddle")
-    SkippableStartMiddle(true, true),
-
-    @SerialName("NotSkippable")
-    NotSkippable(false, false),
-}
-
-@Serializable
-enum class SampleOption {
-    OPTION_ONE,
-    OPTION_TWO,
-    OPTION_THREE,
-}
-
-@Serializable
-@HiltRemoteConfig(SampleProfileWithOptionConfig.KEY)
-data class SampleProfileWithOptionConfig(
-    val title: String,
-    val contactNumber: String,
-    val provider: String,
-    val region: String,
-    val lastUpdatedEpochMillis: Long,
-    val option: SampleOption,
-) {
-    companion object {
-        const val KEY: String = "sample_profile_with_option"
-    }
-}
-
-@Serializable
-@HiltRemoteConfig(WelcomeConfig.KEY)
-data class WelcomeConfig(
-    val text: String = "Hello",
-    val enabled: Boolean = true,
-) {
-    companion object {
-        const val KEY: String = "welcome"
-    }
 }
