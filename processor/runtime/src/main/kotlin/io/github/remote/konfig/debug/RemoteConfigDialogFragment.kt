@@ -387,6 +387,10 @@ internal fun <T : Any> RemoteConfigEditorScreen(
                         }
                     }
                 }
+
+                item("raw_remote_value") {
+                    ReadOnlyField(label = "Remote Value", value = initialRemoteJson)
+                }
             } else {
                 itemsIndexed(fieldEditors, key = { index, field -> field.label.ifBlank { index.toString() } }) { _, field ->
                     FieldEditorItem(
@@ -400,10 +404,8 @@ internal fun <T : Any> RemoteConfigEditorScreen(
                     )
                 }
 
-                if (initialRemoteJson.isNotBlank()) {
-                    item("remote_value") {
-                        ReadOnlyField(label = "Remote Value", value = initialRemoteJson)
-                    }
+                item("remote_value") {
+                    ReadOnlyField(label = "Remote Value", value = initialRemoteJson)
                 }
                 if (initialOverrideJson.isNotBlank()) {
                     item("override_value") {
@@ -510,14 +512,26 @@ private fun EditorDialog(
 }
 
 @Composable
-private fun ReadOnlyField(label: String, value: String) {
-    Column(modifier = Modifier
-        .fillMaxWidth()
-        .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
-        .padding(12.dp)) {
-        Text(text = label, style = MaterialTheme.typography.labelMedium)
+private fun ReadOnlyField(label: String, value: String, placeholder: String = "Not set") {
+    val displayValue = value.ifBlank { placeholder }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.extraSmall)
+            .border(1.dp, MaterialTheme.colorScheme.outline, MaterialTheme.shapes.extraSmall)
+            .padding(12.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(modifier = Modifier.height(4.dp))
-        Text(text = value, style = MaterialTheme.typography.bodySmall)
+        Text(
+            text = displayValue,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
