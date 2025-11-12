@@ -39,9 +39,11 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -88,7 +90,11 @@ internal fun RemoteConfigTheme(
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
-    MaterialTheme(colorScheme = colorScheme, content = content)
+    MaterialTheme(colorScheme = colorScheme) {
+        Surface(modifier = Modifier.fillMaxSize(), color = colorScheme.surface) {
+            content()
+        }
+    }
 }
 
 /**
@@ -291,9 +297,21 @@ internal fun <T : Any> RemoteConfigEditorScreen(
     val displayTitle = title
         .takeUnless { it.equals(configKey, ignoreCase = true) }
         ?.replace(configKey, "", ignoreCase = true)
-        ?.trim()
-        ?.trimStart('-', ':')
-        ?.trim()
+        ?.let { sanitized ->
+            var result = sanitized.trim()
+            if (result.equals("for", ignoreCase = true)) {
+                result = ""
+            } else if (result.endsWith(" for", ignoreCase = true)) {
+                result = result.dropLast(4).trimEnd()
+            }
+            while (result.endsWith(":") || result.endsWith("-")) {
+                result = result.dropLast(1).trimEnd()
+            }
+            result
+                .trimStart('-', ':')
+                .trim()
+        }
+        ?.takeUnless { it.isBlank() }
     val shouldShowTitle = !displayTitle.isNullOrBlank()
 
     EditorDialog(
@@ -710,7 +728,8 @@ private fun EnumField(
                     onClick = {
                         expanded = false
                         onStateChange(field.setter(state, value))
-                    }
+                    },
+                    colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface)
                 )
             }
         }
@@ -935,7 +954,8 @@ private fun PolymorphicField(
                             val instance = field.defaultInstanceProvider(subclass)
                             selectedValue = instance
                             onStateChange(field.setter(state, instance))
-                        }
+                        },
+                        colors = MenuDefaults.itemColors(textColor = MaterialTheme.colorScheme.onSurface)
                     )
                 }
             }
