@@ -9,6 +9,7 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -103,9 +104,8 @@ internal fun RemoteConfigTheme(
  */
 abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
-    private val overrideStore by lazy(LazyThreadSafetyMode.NONE) {
-        createOverrideStore(requireContext().applicationContext)
-    }
+    private val overrideStore: OverrideStore
+        get() = obtainOverrideStore(requireContext().applicationContext)
 
     @Inject
     lateinit var remoteConfigProvider: RemoteConfigProvider
@@ -119,6 +119,15 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
     protected abstract val editor: RemoteConfigEditor<T>
 
     protected open fun createOverrideStore(appContext: Context): OverrideStore = OverrideStore(appContext)
+
+    private fun obtainOverrideStore(appContext: Context): OverrideStore {
+        sharedOverrideStore?.let { return it }
+        return synchronized(overrideStoreLock) {
+            sharedOverrideStore ?: createOverrideStore(appContext).also { created ->
+                sharedOverrideStore = created
+            }
+        }
+    }
 
     protected open fun createJson(): Json = Json {
         prettyPrint = true
@@ -176,6 +185,19 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
                         onDismiss = { dismissAllowingStateLoss() }
                     )
                 }
+            }
+        }
+    }
+
+    companion object {
+        @Volatile
+        private var sharedOverrideStore: OverrideStore? = null
+        private val overrideStoreLock = Any()
+
+        @VisibleForTesting
+        internal fun resetOverrideStore() {
+            synchronized(overrideStoreLock) {
+                sharedOverrideStore = null
             }
         }
     }
