@@ -1,6 +1,7 @@
 package io.github.remote.konfig.debug
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.os.Bundle
 import android.util.Base64
 import android.view.LayoutInflater
@@ -9,6 +10,7 @@ import android.view.ViewGroup
 import android.widget.Toast
 import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,6 +46,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -75,6 +78,18 @@ import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import javax.inject.Inject
+
+/**
+ * Applies the Remote Konfig theme supporting both light and dark color schemes.
+ */
+@Composable
+internal fun RemoteConfigTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+    MaterialTheme(colorScheme = colorScheme, content = content)
+}
 
 /**
  * Base dialog fragment that renders a Compose-powered editor for a remote config entry.
@@ -122,7 +137,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 
         return ComposeView(context).apply {
             setContent {
-                MaterialTheme(colorScheme = darkColorScheme()) {
+                RemoteConfigTheme {
                     RemoteConfigEditorScreen(
                         title = screenTitle,
                         configKey = configKey,
@@ -931,7 +946,7 @@ private fun PolymorphicField(
 
 @Composable
 private fun PreviewSurface(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    RemoteConfigTheme {
         Box(
             modifier = Modifier
                 .background(MaterialTheme.colorScheme.surface)
@@ -1444,7 +1459,8 @@ private fun sampleChoiceFieldEditor(): PolymorphicFieldEditor = PolymorphicField
 
 // region Preview composables
 
-@Preview(name = "Remote Config - Form")
+@Preview(name = "Remote Config - Form (Light)", showBackground = true)
+@Preview(name = "Remote Config - Form (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenForm() {
     val json = PreviewJson
@@ -1466,7 +1482,8 @@ private fun PreviewRemoteConfigEditorScreenForm() {
     }
 }
 
-@Preview(name = "Remote Config - Raw JSON")
+@Preview(name = "Remote Config - Raw JSON (Light)", showBackground = true)
+@Preview(name = "Remote Config - Raw JSON (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenRaw() {
     val json = PreviewJson
@@ -1488,7 +1505,8 @@ private fun PreviewRemoteConfigEditorScreenRaw() {
     }
 }
 
-@Preview(name = "Remote Config - Polymorphic")
+@Preview(name = "Remote Config - Polymorphic (Light)", showBackground = true)
+@Preview(name = "Remote Config - Polymorphic (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewRemoteConfigEditorScreenPolymorphic() {
     val json = PreviewJson
@@ -1510,15 +1528,17 @@ private fun PreviewRemoteConfigEditorScreenPolymorphic() {
     }
 }
 
-@Preview
+@Preview(name = "Create New Config Dialog (Light)", showBackground = true)
+@Preview(name = "Create New Config Dialog (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewCreateNewConfigDialog() {
-    MaterialTheme(colorScheme = darkColorScheme()) {
+    RemoteConfigTheme {
         CreateNewConfigDialog(configKey = "sample_key", onConfirm = {}, onDismiss = {})
     }
 }
 
-@Preview
+@Preview(name = "Editor Dialog (Light)", showBackground = true)
+@Preview(name = "Editor Dialog (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewEditorDialog() {
     PreviewSurface {
@@ -1545,7 +1565,8 @@ private fun PreviewEditorDialog() {
     }
 }
 
-@Preview
+@Preview(name = "Read Only Field (Light)", showBackground = true)
+@Preview(name = "Read Only Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewReadOnlyField() {
     PreviewSurface {
@@ -1553,7 +1574,8 @@ private fun PreviewReadOnlyField() {
     }
 }
 
-@Preview(name = "Field Editor Item")
+@Preview(name = "Field Editor Item (Light)", showBackground = true)
+@Preview(name = "Field Editor Item (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewFieldEditorItem() {
     val field = PreviewDeeplyNestedConfigEditor.fields().first()
@@ -1567,7 +1589,8 @@ private fun PreviewFieldEditorItem() {
     }
 }
 
-@Preview(name = "String Field")
+@Preview(name = "String Field (Light)", showBackground = true)
+@Preview(name = "String Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewStringField() {
     val field = StringFieldEditor(
@@ -1585,7 +1608,8 @@ private fun PreviewStringField() {
     }
 }
 
-@Preview(name = "Boolean Field")
+@Preview(name = "Boolean Field (Light)", showBackground = true)
+@Preview(name = "Boolean Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewBooleanField() {
     val field = BooleanFieldEditor(
@@ -1603,7 +1627,8 @@ private fun PreviewBooleanField() {
     }
 }
 
-@Preview(name = "Numeric Field")
+@Preview(name = "Numeric Field (Light)", showBackground = true)
+@Preview(name = "Numeric Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewNumericField() {
     val field = IntFieldEditor(
@@ -1622,7 +1647,8 @@ private fun PreviewNumericField() {
     }
 }
 
-@Preview(name = "Enum Field")
+@Preview(name = "Enum Field (Light)", showBackground = true)
+@Preview(name = "Enum Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewEnumField() {
     val field = EnumFieldEditor(
@@ -1641,7 +1667,8 @@ private fun PreviewEnumField() {
     }
 }
 
-@Preview(name = "ByteArray Field")
+@Preview(name = "ByteArray Field (Light)", showBackground = true)
+@Preview(name = "ByteArray Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewByteArrayField() {
     val field = ByteArrayFieldEditor(
@@ -1661,7 +1688,8 @@ private fun PreviewByteArrayField() {
     }
 }
 
-@Preview(name = "Class Field")
+@Preview(name = "Class Field (Light)", showBackground = true)
+@Preview(name = "Class Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewClassField() {
     PreviewSurface {
@@ -1674,7 +1702,8 @@ private fun PreviewClassField() {
     }
 }
 
-@Preview(name = "List Field")
+@Preview(name = "List Field (Light)", showBackground = true)
+@Preview(name = "List Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewListField() {
     PreviewSurface {
@@ -1687,7 +1716,8 @@ private fun PreviewListField() {
     }
 }
 
-@Preview(name = "List Item View")
+@Preview(name = "List Item View (Light)", showBackground = true)
+@Preview(name = "List Item View (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewListItemView() {
     val field = sampleEntriesFieldEditor()
@@ -1703,7 +1733,8 @@ private fun PreviewListItemView() {
     }
 }
 
-@Preview(name = "Polymorphic Field")
+@Preview(name = "Polymorphic Field (Light)", showBackground = true)
+@Preview(name = "Polymorphic Field (Dark)", uiMode = Configuration.UI_MODE_NIGHT_YES, showBackground = true)
 @Composable
 private fun PreviewPolymorphicField() {
     PreviewSurface {
