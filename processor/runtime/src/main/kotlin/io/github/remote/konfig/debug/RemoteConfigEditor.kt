@@ -14,6 +14,9 @@ interface RemoteConfigEditor<T : Any> {
     /** Returns a default instance of the configuration type. */
     fun defaultInstance(): T
 
+    /** Returns an empty instance used when creating a brand new config. */
+    fun emptyInstance(): T = defaultInstance()
+
     /**
      * Describes the editable fields for the configuration.
      */

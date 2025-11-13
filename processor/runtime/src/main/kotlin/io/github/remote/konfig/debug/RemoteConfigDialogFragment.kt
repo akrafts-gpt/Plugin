@@ -1,6 +1,8 @@
 package io.github.remote.konfig.debug
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.content.res.Configuration
 import android.os.Bundle
@@ -52,6 +54,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
@@ -61,7 +64,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -83,6 +88,8 @@ import kotlinx.serialization.modules.polymorphic
 import kotlinx.serialization.modules.subclass
 import javax.inject.Inject
 
+private const val DEFAULT_EDITOR_TITLE = "Edit Config"
+
 /**
  * Applies the Remote Konfig theme supporting both light and dark color schemes.
  */
@@ -92,6 +99,17 @@ internal fun RemoteConfigTheme(
     content: @Composable () -> Unit,
 ) {
     val colorScheme = if (darkTheme) darkColorScheme() else lightColorScheme()
+    val view = LocalView.current
+    SideEffect {
+        val window = view.context.findActivity()?.window ?: return@SideEffect
+        val surfaceColor = colorScheme.surface.toArgb()
+        window.statusBarColor = surfaceColor
+        window.navigationBarColor = surfaceColor
+        WindowCompat.getInsetsController(window, view)?.let { controller ->
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
     MaterialTheme(colorScheme = colorScheme) {
         Surface(modifier = Modifier.fillMaxSize(), color = colorScheme.surface) {
             content()
@@ -113,6 +131,8 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
     protected abstract val configKey: String
 
     protected abstract val screenTitle: String
+
+    protected abstract val configTypeName: String
 
     protected abstract val serializer: KSerializer<T>
 
@@ -158,7 +178,8 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
             setContent {
                 RemoteConfigTheme {
                     RemoteConfigEditorScreen(
-                        title = screenTitle,
+                        title = DEFAULT_EDITOR_TITLE,
+                        configTypeName = configTypeName,
                         configKey = configKey,
                         remoteJson = remoteJson,
                         overrideJson = overrideJson,
@@ -206,6 +227,7 @@ abstract class RemoteConfigDialogFragment<T : Any> : DialogFragment() {
 @Composable
 internal fun <T : Any> RemoteConfigEditorScreen(
     title: String,
+    configTypeName: String,
     configKey: String,
     remoteJson: String?,
     overrideJson: String?,
@@ -218,13 +240,15 @@ internal fun <T : Any> RemoteConfigEditorScreen(
     onDismiss: () -> Unit,
 ) {
     val defaultInstance = remember(editor) { editor.defaultInstance() }
+    val emptyTemplateInstance = remember(editor) { editor.emptyInstance() }
     val fieldEditors = remember(editor) { editor.fields() }
     val initialRemoteJson = remoteJson.orEmpty()
     val initialOverrideJson = overrideJson.orEmpty()
-
-    var showCreateDialog by remember {
-        mutableStateOf(initialRemoteJson.isBlank() && initialOverrideJson.isBlank())
+    val shouldStartFromEmpty = remember(initialRemoteJson, initialOverrideJson) {
+        initialRemoteJson.isBlank() && initialOverrideJson.isBlank()
     }
+
+    var showCreateDialog by remember { mutableStateOf(shouldStartFromEmpty) }
     var proceedWithEditing by remember { mutableStateOf(!showCreateDialog) }
 
     if (showCreateDialog) {
@@ -246,11 +270,11 @@ internal fun <T : Any> RemoteConfigEditorScreen(
     val initialJsonFromRepo = initialOverrideJson.ifBlank { initialRemoteJson }
 
     var initialErrorMessage by remember { mutableStateOf<String?>(null) }
-    val initialState: T = remember(initialJsonFromRepo, json, serializer, defaultInstance) {
-        if (initialJsonFromRepo.isBlank()) {
-            defaultInstance
-        } else {
-            runCatching { json.decodeFromString(serializer, initialJsonFromRepo) }
+    val initialState: T = remember(initialJsonFromRepo, json, serializer, defaultInstance, emptyTemplateInstance) {
+        when {
+            initialJsonFromRepo.isBlank() && shouldStartFromEmpty -> emptyTemplateInstance
+            initialJsonFromRepo.isBlank() -> defaultInstance
+            else -> runCatching { json.decodeFromString(serializer, initialJsonFromRepo) }
                 .onFailure { throwable ->
                     initialErrorMessage = throwable.message?.substringBefore(" at path:")
                 }
@@ -262,8 +286,11 @@ internal fun <T : Any> RemoteConfigEditorScreen(
     var showRawJson by remember { mutableStateOf(initialErrorMessage != null) }
     var rawJsonString by remember {
         mutableStateOf(
-            if (initialJsonFromRepo.isNotBlank()) initialJsonFromRepo
-            else json.encodeToString(serializer, initialState)
+            when {
+                initialJsonFromRepo.isNotBlank() -> initialJsonFromRepo
+                shouldStartFromEmpty -> ""
+                else -> json.encodeToString(serializer, initialState)
+            }
         )
     }
     var rawErrorMessage by remember { mutableStateOf(initialErrorMessage) }
@@ -338,7 +365,8 @@ internal fun <T : Any> RemoteConfigEditorScreen(
                 .trim()
         }
         ?.takeUnless { it.isBlank() }
-    val shouldShowTitle = !displayTitle.isNullOrBlank()
+        ?: DEFAULT_EDITOR_TITLE
+    val shouldShowTitle = displayTitle.isNotBlank()
 
     EditorDialog(
         title = displayTitle.orEmpty(),
@@ -359,18 +387,26 @@ internal fun <T : Any> RemoteConfigEditorScreen(
         isRawMode = showRawJson,
         isConfirmEnabled = if (showRawJson) isCurrentRawJsonValid else true,
         headerContent = {
+            val metadataTextStyle = MaterialTheme.typography.bodyMedium
+            val metadataTextColor = MaterialTheme.colorScheme.onSurfaceVariant
             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    modifier = Modifier.testTag("config_type"),
+                    text = "Type: $configTypeName",
+                    style = metadataTextStyle,
+                    color = metadataTextColor
+                )
                 Text(
                     modifier = Modifier.testTag("config_key"),
                     text = "Key: $configKey",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = metadataTextStyle,
+                    color = metadataTextColor
                 )
                 Text(
                     modifier = Modifier.testTag("config_source"),
                     text = if (initialOverrideJson.isNotBlank()) "Source: Override" else "Source: Remote",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    style = metadataTextStyle,
+                    color = metadataTextColor
                 )
                 if (!isCurrentRawJsonValid && showRawJson) {
                     Button(
@@ -378,12 +414,12 @@ internal fun <T : Any> RemoteConfigEditorScreen(
                             .fillMaxWidth()
                             .testTag("discard_and_create_new_button"),
                         onClick = {
-                            val newInstance = editor.defaultInstance()
+                            val newInstance = editor.emptyInstance()
                             currentState = newInstance
                             rawJsonString = json.encodeToString(serializer, newInstance)
                             showRawJson = false
                             rawErrorMessage = null
-                            Toast.makeText(context, "Created new from default", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "Created new empty config", Toast.LENGTH_SHORT).show()
                         }
                     ) {
                         Text("Discard and create new")
@@ -1443,6 +1479,12 @@ private fun sampleChoiceDefaultInstance(clazz: KClass<*>): SampleChoiceVariant? 
     else -> null
 }
 
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
 private object PreviewDeeplyNestedConfigEditor : RemoteConfigEditor<SampleDeeplyNestedConfig> {
     override val key: String = "sample_deeply_nested"
 
@@ -1531,6 +1573,7 @@ private fun PreviewRemoteConfigEditorScreenForm() {
     PreviewSurface {
         RemoteConfigEditorScreen(
             title = "Deeply Nested Config",
+            configTypeName = "SampleDeeplyNestedConfig",
             configKey = PreviewDeeplyNestedConfigEditor.key,
             remoteJson = remote,
             overrideJson = "",
@@ -1554,6 +1597,7 @@ private fun PreviewRemoteConfigEditorScreenRaw() {
     PreviewSurface {
         RemoteConfigEditorScreen(
             title = "Deeply Nested Config",
+            configTypeName = "SampleDeeplyNestedConfig",
             configKey = PreviewDeeplyNestedConfigEditor.key,
             remoteJson = remote,
             overrideJson = "{invalid json}",
@@ -1577,6 +1621,7 @@ private fun PreviewRemoteConfigEditorScreenPolymorphic() {
     PreviewSurface {
         RemoteConfigEditorScreen(
             title = "Choice Config",
+            configTypeName = "SampleChoiceConfig",
             configKey = PreviewSampleChoiceConfigEditor.key,
             remoteJson = remote,
             overrideJson = "",

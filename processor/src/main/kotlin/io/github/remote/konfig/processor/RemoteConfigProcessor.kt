@@ -175,6 +175,7 @@ private class EditorGenerator(
                     .build()
             )
             .addFunction(defaultInstanceFun(modelTypeName))
+            .addFunction(emptyInstanceFun(modelTypeName))
             .addFunction(fieldsFun(modelTypeName))
 
         val polymorphicBindings = polymorphicBindings()
@@ -195,6 +196,15 @@ private class EditorGenerator(
             .addModifiers(KModifier.OVERRIDE)
             .returns(modelTypeName)
             .addCode("return %L\n", defaultValue)
+            .build()
+    }
+
+    private fun emptyInstanceFun(modelTypeName: ClassName): FunSpec {
+        val emptyValue = emptyValueForDeclaration(modelClass, mutableSetOf())
+        return FunSpec.builder("emptyInstance")
+            .addModifiers(KModifier.OVERRIDE)
+            .returns(modelTypeName)
+            .addCode("return %L\n", emptyValue)
             .build()
     }
 
@@ -533,6 +543,17 @@ private class EditorGenerator(
     private fun defaultValueForDeclaration(
         declaration: KSClassDeclaration,
         visited: MutableSet<String>
+    ): CodeBlock = instantiateValueForDeclaration(declaration, visited, true)
+
+    private fun emptyValueForDeclaration(
+        declaration: KSClassDeclaration,
+        visited: MutableSet<String>
+    ): CodeBlock = instantiateValueForDeclaration(declaration, visited, false)
+
+    private fun instantiateValueForDeclaration(
+        declaration: KSClassDeclaration,
+        visited: MutableSet<String>,
+        respectConstructorDefaults: Boolean,
     ): CodeBlock {
         val qualifiedName = declaration.qualifiedName?.asString()
         if (qualifiedName != null && !visited.add(qualifiedName)) {
@@ -558,7 +579,7 @@ private class EditorGenerator(
         if (declaration.modifiers.contains(Modifier.SEALED) || declaration.classKind == ClassKind.INTERFACE) {
             val subclasses = declaration.findPolymorphicSubclasses().toList()
             if (subclasses.isNotEmpty()) {
-                return defaultValueForDeclaration(subclasses.first(), visited)
+                return instantiateValueForDeclaration(subclasses.first(), visited, respectConstructorDefaults)
             }
             logger.warn("No subclasses found for polymorphic type ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()}.")
             return CodeBlock.of("error(%S)", "Cannot create default instance for ${declaration.simpleName.asString()}")
@@ -569,7 +590,11 @@ private class EditorGenerator(
             return CodeBlock.of("%T()", declaration.toClassName())
         }
 
-        val parameters = constructor.parameters.filterNot(KSValueParameter::hasDefault)
+        val parameters = if (respectConstructorDefaults) {
+            constructor.parameters.filterNot(KSValueParameter::hasDefault)
+        } else {
+            constructor.parameters
+        }
         if (parameters.isEmpty()) {
             return CodeBlock.of("%T()", declaration.toClassName())
         }
@@ -580,8 +605,8 @@ private class EditorGenerator(
         parameters.forEach { parameter ->
             val name = parameter.name?.asString() ?: return@forEach
             val type = parameter.type.resolve()
-            val defaultValue = defaultValueForType(type, visited)
-            block.add("%L = %L,\n", name, defaultValue)
+            val value = valueForType(type, visited, respectConstructorDefaults)
+            block.add("%L = %L,\n", name, value)
         }
         block.unindent()
         block.add(")")
@@ -593,7 +618,17 @@ private class EditorGenerator(
         return block.build()
     }
 
-    private fun defaultValueForType(type: KSType, visited: MutableSet<String>): CodeBlock {
+    private fun defaultValueForType(type: KSType, visited: MutableSet<String>): CodeBlock =
+        valueForType(type, visited, true)
+
+    private fun emptyValueForType(type: KSType, visited: MutableSet<String>): CodeBlock =
+        valueForType(type, visited, false)
+
+    private fun valueForType(
+        type: KSType,
+        visited: MutableSet<String>,
+        respectConstructorDefaults: Boolean,
+    ): CodeBlock {
         if (type.nullability == Nullability.NULLABLE) {
             return CodeBlock.of("null")
         }
@@ -669,11 +704,11 @@ private class EditorGenerator(
 
         return when (declaration.classKind) {
             ClassKind.ENUM_CLASS -> CodeBlock.of("%T.entries.first()", declaration.toClassName())
-            ClassKind.CLASS -> defaultValueForDeclaration(declaration, visited)
+            ClassKind.CLASS -> instantiateValueForDeclaration(declaration, visited, respectConstructorDefaults)
             ClassKind.INTERFACE, ClassKind.OBJECT, ClassKind.ANNOTATION_CLASS -> {
                 val subclasses = declaration.findPolymorphicSubclasses().toList()
                 if (subclasses.isNotEmpty()) {
-                    defaultValueForDeclaration(subclasses.first(), visited)
+                    instantiateValueForDeclaration(subclasses.first(), visited, respectConstructorDefaults)
                 } else {
                     CodeBlock.of("error(%S)", "Cannot create default value for ${declaration.simpleName.asString()}")
                 }
@@ -844,6 +879,11 @@ private class ScreenGenerator(
             .addProperty(
                 PropertySpec.builder("screenTitle", STRING, KModifier.OVERRIDE)
                     .initializer("%S", "${modelClass.simpleName.asString()} for $configKey")
+                    .build(),
+            )
+            .addProperty(
+                PropertySpec.builder("configTypeName", STRING, KModifier.OVERRIDE)
+                    .initializer("%S", modelClass.simpleName.asString())
                     .build(),
             )
             .addProperty(

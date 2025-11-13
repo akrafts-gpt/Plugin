@@ -69,6 +69,7 @@ class RemoteConfigDialogContentTest {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 RemoteConfigEditorScreen(
                     title = "Sample Config",
+                    configTypeName = "SampleConfig",
                     configKey = editor.key,
                     remoteJson = remotePayload,
                     overrideJson = null,
@@ -83,6 +84,7 @@ class RemoteConfigDialogContentTest {
             }
         }
 
+        composeRule.onNodeWithText("Type: SampleConfig").assertIsDisplayed()
         composeRule.onNodeWithText("Key: sample_config").assertIsDisplayed()
         composeRule.onAllNodesWithText("Cancel").assertCountEquals(1)
         composeRule.onAllNodesWithText("Save").assertCountEquals(1)

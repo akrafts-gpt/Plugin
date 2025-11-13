@@ -25,6 +25,8 @@ class ConfigListActivityTest {
         composeRule.onNodeWithText(targetTitle).performClick()
         composeRule.waitForIdle()
 
+        composeRule.onNodeWithText("Edit Config").assertIsDisplayed()
+        composeRule.onNodeWithText("Type: SampleChoiceConfig").assertIsDisplayed()
         composeRule.onNodeWithText("Key: sample_choice_config").assertIsDisplayed()
         composeRule.onAllNodesWithText("Close").assertCountEquals(1)
         composeRule.onAllNodesWithText("Share").assertCountEquals(1)

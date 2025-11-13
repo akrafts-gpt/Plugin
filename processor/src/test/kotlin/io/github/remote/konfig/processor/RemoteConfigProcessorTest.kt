@@ -221,6 +221,7 @@ private val STUB_SOURCES = listOf(
         interface RemoteConfigEditor<T : Any> {
             val key: String
             fun defaultInstance(): T
+            fun emptyInstance(): T
             fun fields(): List<FieldEditor>
             val serializersModule: SerializersModule
         }

@@ -1,6 +1,9 @@
 package io.github.remote.konfig.sample
 
+import android.app.Activity
 import android.app.Application
+import android.content.Context
+import android.content.ContextWrapper
 import android.os.Bundle
 import androidx.activity.compose.setContent
 import androidx.appcompat.app.AppCompatActivity
@@ -9,10 +12,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.CardDefaults
@@ -26,16 +32,20 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalView
 import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.components.SingletonComponent
+import androidx.core.view.WindowCompat
 import io.github.remote.konfig.HiltRemoteConfig
 import io.github.remote.konfig.RemoteConfigProvider
 import io.github.remote.konfig.RemoteConfigScreen
@@ -184,6 +194,7 @@ class ConfigListActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             SampleAppTheme {
                 Surface(
@@ -202,7 +213,10 @@ class ConfigListActivity : AppCompatActivity() {
                             )
                         }.sortedBy { it.title }
                     }
-                    SampleAppHome(entries = entries) { entry ->
+                    SampleAppHome(
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing),
+                        entries = entries,
+                    ) { entry ->
                         entry.screen.show(supportFragmentManager)
                     }
                 }
@@ -213,11 +227,12 @@ class ConfigListActivity : AppCompatActivity() {
 
 @Composable
 private fun SampleAppHome(
+    modifier: Modifier = Modifier,
     entries: List<ScreenEntry>,
     onEntrySelected: (ScreenEntry) -> Unit,
 ) {
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize(),
         contentPadding = PaddingValues(vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
@@ -376,10 +391,28 @@ private val SampleTypography = Typography()
 
 @Composable
 fun SampleAppTheme(content: @Composable () -> Unit) {
-    val colorScheme = if (isSystemInDarkTheme()) DarkColorScheme else LightColorScheme
+    val darkTheme = isSystemInDarkTheme()
+    val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
+    val view = LocalView.current
+    SideEffect {
+        val window = view.context.findActivity()?.window ?: return@SideEffect
+        val surfaceColor = colorScheme.surface.toArgb()
+        window.statusBarColor = surfaceColor
+        window.navigationBarColor = surfaceColor
+        WindowCompat.getInsetsController(window, view)?.let { controller ->
+            controller.isAppearanceLightStatusBars = !darkTheme
+            controller.isAppearanceLightNavigationBars = !darkTheme
+        }
+    }
     MaterialTheme(
         colorScheme = colorScheme,
         typography = SampleTypography,
         content = content,
     )
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
