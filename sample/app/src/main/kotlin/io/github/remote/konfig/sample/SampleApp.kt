@@ -72,6 +72,9 @@ abstract class SampleRemoteConfigModule {
 data class DeeplyNestedShowcaseConfig(
     val title: String = "Remote Konfig Spotlight",
     val contactNumber: String = "+1-555-KONFIG",
+    /**
+     * Provider comment needed to show that it works
+     */
     val provider: String = "Remote Konfig",
     val region: String = "Global",
     val lastUpdatedEpochMillis: Long = 1_708_565_200_000,

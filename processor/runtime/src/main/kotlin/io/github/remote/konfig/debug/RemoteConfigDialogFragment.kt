@@ -682,7 +682,8 @@ private fun StringField(
             .testTag(field.label),
         value = field.getter(state) as? String ?: "",
         onValueChange = { updated -> onStateChange(field.setter(state, updated)) },
-        label = { Text(field.label) }
+        label = { Text(field.label) },
+        supportingText = field.description?.let { { Text(it) } }
     )
 }
 
@@ -694,15 +695,25 @@ private fun BooleanField(
     onStateChange: (Any) -> Unit,
 ) {
     val value = field.getter(state) as? Boolean ?: false
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Switch(checked = value, onCheckedChange = { onStateChange(field.setter(state, it)) })
-        Text(text = field.label, style = MaterialTheme.typography.bodyLarge)
+    Column(modifier = modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Switch(checked = value, onCheckedChange = { onStateChange(field.setter(state, it)) })
+            Text(text = field.label, style = MaterialTheme.typography.bodyLarge)
+        }
+        if (!field.description.isNullOrBlank()) {
+            Text(
+                text = field.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, bottom = 4.dp)
+            )
+        }
     }
 }
 
@@ -746,7 +757,12 @@ private fun NumericField(
         },
         isError = errorMessage != null,
         supportingText = {
-            errorMessage?.let { Text(it) }
+            Column {
+                errorMessage?.let { Text(it) }
+                if (errorMessage == null && !field.description.isNullOrBlank()) {
+                    Text(field.description!!)
+                }
+            }
         },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         label = { Text(field.label) }
@@ -780,7 +796,8 @@ private fun EnumField(
                 disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
                 disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
             ),
-            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) }
+            trailingIcon = { Icon(Icons.Filled.ArrowDropDown, contentDescription = null) },
+            supportingText = field.description?.let { { Text(it) } }
         )
 
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
@@ -826,7 +843,12 @@ private fun ByteArrayField(
         },
         label = { Text(field.label) },
         supportingText = {
-            Text("Value is encoded as Base64")
+            Column {
+                Text("Value is encoded as Base64")
+                if (!field.description.isNullOrBlank()) {
+                    Text(field.description)
+                }
+            }
         }
     )
 }
@@ -848,6 +870,13 @@ private fun ClassField(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        if (!field.description.isNullOrBlank()) {
+            Text(
+                text = field.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         field.nestedFieldEditors.forEach { nestedEditor ->
             FieldEditorItem(
                 modifier = Modifier.fillMaxWidth(),
@@ -879,6 +908,13 @@ private fun ListField(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        if (!field.description.isNullOrBlank()) {
+            Text(
+                text = field.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         if (items.isEmpty()) {
             Button(onClick = {
                 val newItem = field.defaultItemProvider() ?: return@Button
@@ -989,6 +1025,13 @@ private fun PolymorphicField(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(text = field.label, style = MaterialTheme.typography.bodySmall)
+        if (!field.description.isNullOrBlank()) {
+            Text(
+                text = field.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         Box(modifier = Modifier.clickable { expanded = true }) {
             OutlinedTextField(
                 value = selectedClass?.simpleName ?: "Select Type",

@@ -274,6 +274,7 @@ private class EditorGenerator(
         property: KSPropertyDeclaration
     ): CodeBlock? {
         val label = property.simpleName.asString().replaceFirstChar(Char::titlecase)
+        val description = property.docString?.cleanKDoc()
         val type = property.type.resolve()
         val typeName = type.toTypeName()
         val propertyName = property.simpleName.asString()
@@ -293,13 +294,14 @@ private class EditorGenerator(
                     logger.warn(
                         "No subclasses found for polymorphic property ${propertyName} of ${owner.simpleName.asString()}"
                     )
-                    buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter)
+                    buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter, description)
                 } else {
                     generatePolymorphicFieldEditor(
                         propertyLabel = label,
                         getter = getter,
                         setter = createPolymorphicSetter(parentType, propertyName, typeName, type.nullability),
-                        subclasses = subclasses
+                        subclasses = subclasses,
+                        description = description
                     )
                 }
             }
@@ -309,18 +311,23 @@ private class EditorGenerator(
                     .add("label = %S,\n", label)
                     .add("getter = %L,\n", getter)
                     .add("setter = %L,\n", setter)
-                    .add("values = listOf(*%T.values())\n", propertyDeclaration.toClassName())
-                    .unindent().add(")")
+                    .add("values = listOf(*%T.values())", propertyDeclaration.toClassName())
+                    .apply {
+                        if (description != null) {
+                            add(",\ndescription = %S", description)
+                        }
+                    }
+                    .unindent().add("\n)")
                     .build()
             }
-            typeName.toString() == "kotlin.String" -> buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.Boolean" -> buildSimpleFieldEditor(BOOLEAN_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.Int" -> buildSimpleFieldEditor(INT_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.Long" -> buildSimpleFieldEditor(LONG_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.Float" -> buildSimpleFieldEditor(FLOAT_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.Double" -> buildSimpleFieldEditor(DOUBLE_FIELD_EDITOR, label, getter, setter)
-            typeName.toString() == "kotlin.ByteArray" -> buildSimpleFieldEditor(BYTE_ARRAY_FIELD_EDITOR, label, getter, setter)
-            isList -> generateListFieldEditor(owner, propertyName, label, getter, type, setter)
+            typeName.toString() == "kotlin.String" -> buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.Boolean" -> buildSimpleFieldEditor(BOOLEAN_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.Int" -> buildSimpleFieldEditor(INT_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.Long" -> buildSimpleFieldEditor(LONG_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.Float" -> buildSimpleFieldEditor(FLOAT_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.Double" -> buildSimpleFieldEditor(DOUBLE_FIELD_EDITOR, label, getter, setter, description)
+            typeName.toString() == "kotlin.ByteArray" -> buildSimpleFieldEditor(BYTE_ARRAY_FIELD_EDITOR, label, getter, setter, description)
+            isList -> generateListFieldEditor(owner, propertyName, label, getter, type, setter, description)
             isDataClass && propertyDeclaration != null -> {
                 val nestedEditors = generateFieldEditorsListCode(propertyDeclaration, propertyDeclaration.toClassName())
                 CodeBlock.builder()
@@ -328,8 +335,13 @@ private class EditorGenerator(
                     .add("label = %S,\n", label)
                     .add("getter = %L,\n", getter)
                     .add("setter = %L,\n", setter)
-                    .add("nestedFieldEditors = %L\n", nestedEditors)
-                    .unindent().add(")")
+                    .add("nestedFieldEditors = %L", nestedEditors)
+                    .apply {
+                        if (description != null) {
+                            add(",\ndescription = %S", description)
+                        }
+                    }
+                    .unindent().add("\n)")
                     .build()
             }
             else -> {
@@ -345,7 +357,8 @@ private class EditorGenerator(
                     editorClass = STRING_FIELD_EDITOR,
                     label = label,
                     getter = fallbackGetter,
-                    setter = CodeBlock.of("{ data, _ -> data }")
+                    setter = CodeBlock.of("{ data, _ -> data }"),
+                    description = description
                 )
             }
         }
@@ -355,15 +368,21 @@ private class EditorGenerator(
         editorClass: ClassName,
         label: String,
         getter: CodeBlock,
-        setter: CodeBlock
+        setter: CodeBlock,
+        description: String? = null
     ): CodeBlock {
         return CodeBlock.builder()
             .add("%T(\n", editorClass).indent()
             .add("label = %S,\n", label)
             .add("getter = %L,\n", getter)
-            .add("setter = %L\n", setter)
+            .add("setter = %L", setter)
+            .apply {
+                if (description != null) {
+                    add(",\ndescription = %S", description)
+                }
+            }
             .unindent()
-            .add(")")
+            .add("\n)")
             .build()
     }
 
@@ -396,18 +415,19 @@ private class EditorGenerator(
         label: String,
         getter: CodeBlock,
         type: KSType,
-        setter: CodeBlock
+        setter: CodeBlock,
+        description: String? = null
     ): CodeBlock {
         val itemType = type.arguments.firstOrNull()?.type?.resolve()
         if (itemType == null) {
             logger.warn("Could not resolve list item type for property ${owner.simpleName.asString()}.$propertyName")
-            return buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter)
+            return buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter, description)
         }
 
         val itemDeclaration = itemType.declaration as? KSClassDeclaration
         if (itemDeclaration == null) {
             logger.warn("Unsupported list item type for property ${owner.simpleName.asString()}.$propertyName")
-            return buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter)
+            return buildSimpleFieldEditor(STRING_FIELD_EDITOR, label, getter, setter, description)
         }
 
         val defaultItem = defaultValueForType(itemType, mutableSetOf())
@@ -419,8 +439,13 @@ private class EditorGenerator(
             .add("getter = %L,\n", getter)
             .add("setter = %L,\n", setter)
             .add("defaultItemProvider = { %L },\n", defaultItem)
-            .add("itemEditor = %L\n", itemEditor)
-            .unindent().add(")")
+            .add("itemEditor = %L", itemEditor)
+            .apply {
+                if (description != null) {
+                    add(",\ndescription = %S", description)
+                }
+            }
+            .unindent().add("\n)")
             .build()
     }
 
@@ -428,7 +453,8 @@ private class EditorGenerator(
         propertyLabel: String,
         getter: CodeBlock,
         setter: CodeBlock,
-        subclasses: List<KSClassDeclaration>
+        subclasses: List<KSClassDeclaration>,
+        description: String? = null
     ): CodeBlock {
         val block = CodeBlock.builder()
         block.add("%T(\n", POLYMORPHIC_FIELD_EDITOR).indent()
@@ -457,8 +483,11 @@ private class EditorGenerator(
         }
         block.add("else -> null\n").unindent()
         block.add("}\n").unindent()
-        block.add("}\n")
-        block.unindent().add(")")
+        block.add("}")
+        if (description != null) {
+            block.add(",\ndescription = %S", description)
+        }
+        block.unindent().add("\n)")
         return block.build()
     }
 
@@ -941,6 +970,19 @@ private fun KSAnnotation.matchesQualifiedName(expected: String): Boolean {
 }
 
 private fun KSClassDeclaration.isDataClass(): Boolean = Modifier.DATA in modifiers
+
+private fun String.cleanKDoc(): String {
+    return lines()
+        .map { it.trim() }
+        .map { line ->
+            line.removePrefix("/**")
+                .removeSuffix("*/")
+                .removePrefix("*")
+                .trim()
+        }
+        .filter { it.isNotEmpty() }
+        .joinToString("\n")
+}
 
 private fun KSType.displayName(): String {
     val declarationName = declaration.qualifiedName?.asString() ?: toString()

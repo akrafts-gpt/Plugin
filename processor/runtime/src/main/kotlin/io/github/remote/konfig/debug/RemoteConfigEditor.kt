@@ -35,6 +35,7 @@ interface RemoteConfigEditor<T : Any> {
  */
 sealed interface FieldEditor {
     val label: String
+    val description: String?
     val getter: (Any) -> Any?
     val setter: (Any, Any?) -> Any
 }
@@ -43,36 +44,42 @@ class StringFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class BooleanFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class IntFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class LongFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class FloatFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class DoubleFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class EnumFieldEditor(
@@ -80,12 +87,14 @@ class EnumFieldEditor(
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
     val values: List<Enum<*>>,
+    override val description: String? = null,
 ) : FieldEditor
 
 class ByteArrayFieldEditor(
     override val label: String,
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
+    override val description: String? = null,
 ) : FieldEditor
 
 class ClassFieldEditor(
@@ -93,6 +102,7 @@ class ClassFieldEditor(
     override val getter: (Any) -> Any?,
     override val setter: (Any, Any?) -> Any,
     val nestedFieldEditors: List<FieldEditor>,
+    override val description: String? = null,
 ) : FieldEditor
 
 class ListFieldEditor(
@@ -101,6 +111,7 @@ class ListFieldEditor(
     override val setter: (Any, Any?) -> Any,
     val defaultItemProvider: () -> Any?,
     val itemEditor: FieldEditor,
+    override val description: String? = null,
 ) : FieldEditor
 
 class PolymorphicFieldEditor(
@@ -110,4 +121,5 @@ class PolymorphicFieldEditor(
     val subclasses: List<KClass<*>>,
     val nestedFieldEditorsProvider: (KClass<*>) -> List<FieldEditor>,
     val defaultInstanceProvider: (KClass<*>) -> Any?,
+    override val description: String? = null,
 ) : FieldEditor
