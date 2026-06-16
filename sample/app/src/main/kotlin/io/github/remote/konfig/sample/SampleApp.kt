@@ -162,6 +162,51 @@ data class WelcomeExperienceConfig(
     }
 }
 
+@Serializable
+sealed class NotificationType {
+    @Serializable
+    @SerialName("Push")
+    data class Push(
+        val title: String,
+        val body: String,
+        /**
+         * Channel ID for the notification
+         */
+        val channelId: String = "default_channel"
+    ) : NotificationType()
+
+    @Serializable
+    @SerialName("Email")
+    data class Email(
+        val subject: String,
+        val recipient: String,
+        val isHtml: Boolean = false
+    ) : NotificationType()
+
+    @Serializable
+    @SerialName("InApp")
+    data class InApp(
+        val message: String,
+        /**
+         * How long the message should be visible in milliseconds
+         */
+        val durationMillis: Int = 3000
+    ) : NotificationType()
+}
+
+@Serializable
+@HiltRemoteConfig(NotificationShowcaseConfig.KEY)
+data class NotificationShowcaseConfig(
+    val mainNotification: NotificationType = NotificationType.Push("Welcome!", "Thanks for joining us.", "onboarding"),
+    val fallbackNotifications: List<NotificationType> = listOf(
+        NotificationType.InApp("Please complete your profile", 5000)
+    )
+) {
+    companion object {
+        const val KEY = "notification_showcase"
+    }
+}
+
 @Singleton
 class FakeRemoteConfigProvider @Inject constructor() : RemoteConfigProvider {
 
@@ -183,6 +228,12 @@ class FakeRemoteConfigProvider @Inject constructor() : RemoteConfigProvider {
                 lastUpdatedEpochMillis = 1_708_565_200_000,
                 option = SampleOption.OPTION_TWO,
             )
+        ),
+        NotificationShowcaseConfig.KEY to json.encodeToString(
+            NotificationShowcaseConfig()
+        ),
+        DeeplyNestedShowcaseConfig.KEY to json.encodeToString(
+            DeeplyNestedShowcaseConfig()
         ),
     )
 
@@ -345,6 +396,10 @@ private val SampleScreenMetadata = mapOf(
     ProfileOptionsConfig.KEY to RemoteConfigMetadata(
         typeName = ProfileOptionsConfig::class.simpleName ?: "ProfileOptionsConfig",
         key = ProfileOptionsConfig.KEY,
+    ),
+    NotificationShowcaseConfig.KEY to RemoteConfigMetadata(
+        typeName = NotificationShowcaseConfig::class.simpleName ?: "NotificationShowcaseConfig",
+        key = NotificationShowcaseConfig.KEY,
     ),
 )
 

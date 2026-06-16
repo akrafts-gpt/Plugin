@@ -285,7 +285,9 @@ private class EditorGenerator(
         val isEnum = propertyDeclaration?.classKind == ClassKind.ENUM_CLASS
         val isDataClass = propertyDeclaration?.isDataClass() == true
         val isList = typeName.toString().startsWith("kotlin.collections.List")
-        val isPolymorphic = property.annotations.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) }
+        val isPolymorphic = property.annotations.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) } ||
+            propertyDeclaration?.modifiers?.contains(Modifier.SEALED) == true ||
+            propertyDeclaration?.classKind == ClassKind.INTERFACE
 
         return when {
             isPolymorphic && propertyDeclaration != null -> {
@@ -494,6 +496,9 @@ private class EditorGenerator(
     private fun generateItemEditor(itemType: KSType, itemTypeDecl: KSClassDeclaration): CodeBlock {
         val itemTypeName = itemType.toTypeName()
         val label = "Item"
+        val isPolymorphic = itemTypeDecl.modifiers.contains(Modifier.SEALED) ||
+            itemTypeDecl.classKind == ClassKind.INTERFACE
+
         return when {
             itemTypeName.toString() == "kotlin.String" -> buildSimpleFieldEditor(
                 STRING_FIELD_EDITOR,
@@ -545,6 +550,26 @@ private class EditorGenerator(
                 .add("values = listOf(*%T.values())\n", itemTypeDecl.toClassName())
                 .unindent().add(")")
                 .build()
+            isPolymorphic -> {
+                val subclasses = itemTypeDecl.findPolymorphicSubclasses().toList()
+                if (subclasses.isEmpty()) {
+                    logger.warn("No subclasses found for polymorphic list item type ${itemTypeName}")
+                    CodeBlock.builder()
+                        .add("%T(\n", STRING_FIELD_EDITOR).indent()
+                        .add("label = %S,\n", label)
+                        .add("getter = { it?.toString() ?: \"\" },\n")
+                        .add("setter = { data, _ -> data }\n")
+                        .unindent().add(")")
+                        .build()
+                } else {
+                    generatePolymorphicFieldEditor(
+                        propertyLabel = label,
+                        getter = CodeBlock.of("{ it }"),
+                        setter = CodeBlock.of("{ _, value -> value }"),
+                        subclasses = subclasses
+                    )
+                }
+            }
             itemTypeDecl.isDataClass() -> {
                 val nestedEditors = generateFieldEditorsListCode(itemTypeDecl, itemTypeDecl.toClassName())
                 CodeBlock.builder()
@@ -748,35 +773,45 @@ private class EditorGenerator(
 
     private fun polymorphicBindings(): LinkedHashMap<KSClassDeclaration, List<KSClassDeclaration>> {
         val bindings = linkedMapOf<KSClassDeclaration, List<KSClassDeclaration>>()
-        modelClass.getAllProperties()
-            .filter { property ->
-                property.annotations.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) }
-            }
-            .forEach { property ->
-                val declaration = property.type.resolve().declaration as? KSClassDeclaration ?: return@forEach
-                if (!declaration.isPolymorphicRoot()) {
-                    logger.warn(
-                        "${property.simpleName.asString()} is marked @Polymorphic but ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} is not a polymorphic root.",
-                        property
-                    )
-                    return@forEach
+        val visited = mutableSetOf<String>()
+
+        fun collect(decl: KSClassDeclaration) {
+            val qName = decl.qualifiedName?.asString() ?: return
+            if (!visited.add(qName)) return
+
+            decl.getAllProperties().forEach { prop ->
+                val type = prop.type.resolve()
+
+                fun checkType(t: KSType, p: KSPropertyDeclaration?) {
+                    val d = t.declaration as? KSClassDeclaration ?: return
+                    val isPolymorphic = (p?.annotations?.any { it.matchesQualifiedName(POLYMORPHIC_ANNOTATION) } == true) ||
+                        d.modifiers.contains(Modifier.SEALED) ||
+                        d.classKind == ClassKind.INTERFACE
+
+                    if (isPolymorphic && d.isPolymorphicRoot()) {
+                        val subclasses = d.findPolymorphicSubclasses()
+                            .distinctBy { it.qualifiedName?.asString() }
+                            .sortedBy { it.qualifiedName?.asString() ?: it.simpleName.asString() }
+                            .toList()
+
+                        if (subclasses.isNotEmpty()) {
+                            bindings.putIfAbsent(d, subclasses)
+                            subclasses.forEach { collect(it) }
+                        }
+                    } else if (d.isDataClass()) {
+                        collect(d)
+                    }
+
+                    t.arguments.forEach { arg ->
+                        arg.type?.resolve()?.let { checkType(it, null) }
+                    }
                 }
 
-                val subclasses = declaration.findPolymorphicSubclasses()
-                    .distinctBy { it.qualifiedName?.asString() }
-                    .sortedBy { it.qualifiedName?.asString() ?: it.simpleName.asString() }
-                    .toList()
-
-                if (subclasses.isEmpty()) {
-                    logger.warn(
-                        "No subclasses found for polymorphic type ${declaration.qualifiedName?.asString() ?: declaration.simpleName.asString()} referenced from ${modelClass.qualifiedName?.asString() ?: modelClass.simpleName.asString()}.${property.simpleName.asString()}"
-                    )
-                    return@forEach
-                }
-
-                bindings.putIfAbsent(declaration, subclasses)
+                checkType(type, prop)
             }
+        }
 
+        collect(modelClass)
         return bindings
     }
 
