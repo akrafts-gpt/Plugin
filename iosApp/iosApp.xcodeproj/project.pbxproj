@@ -1,0 +1,223 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A1B1C1D128C0A5F200C0D701 /* iOSApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B1C1D328C0A5F200C0D701 /* iOSApp.swift */; };
+		A1B1C1D228C0A5F200C0D701 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B1C1D428C0A5F200C0D701 /* ContentView.swift */; };
+		A1B1C1D528C0A5F200C0D701 /* ComposeApp.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B1C1D628C0A5F200C0D701 /* ComposeApp.framework */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A1B1C1D328C0A5F200C0D701 /* iOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = iOSApp.swift; sourceTree = "<group>"; };
+		A1B1C1D428C0A5F200C0D701 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		A1B1C1D628C0A5F200C0D701 /* ComposeApp.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = ComposeApp.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B1C1D728C0A5F200C0D701 /* iosApp.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = iosApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1B1C1D828C0A5F200C0D701 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A1B1C1D928C0A5F200C0D701 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B1C1D528C0A5F200C0D701 /* ComposeApp.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A1B1C1DA28C0A5F200C0D701 /* Root */ = {
+			isa = PBXGroup;
+			children = (
+				A1B1C1DB28C0A5F200C0D701 /* iosApp */,
+				A1B1C1DC28C0A5F200C0D701 /* Products */,
+				A1B1C1D628C0A5F200C0D701 /* ComposeApp.framework */,
+			);
+			sourceTree = "<group>";
+		};
+		A1B1C1DB28C0A5F200C0D701 /* iosApp */ = {
+			isa = PBXGroup;
+			children = (
+				A1B1C1D328C0A5F200C0D701 /* iOSApp.swift */,
+				A1B1C1D428C0A5F200C0D701 /* ContentView.swift */,
+				A1B1C1D828C0A5F200C0D701 /* Info.plist */,
+			);
+			path = iosApp;
+			sourceTree = "<group>";
+		};
+		A1B1C1DC28C0A5F200C0D701 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A1B1C1D728C0A5F200C0D701 /* iosApp.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A1B1C1DD28C0A5F200C0D701 /* iosApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A1B1C1E028C0A5F200C0D701 /* Build configuration list for PBXNativeTarget "iosApp" */;
+			buildPhases = (
+				A1B1C1E128C0A5F200C0D701 /* ShellScript */,
+				A1B1C1E228C0A5F200C0D701 /* Sources */,
+				A1B1C1D928C0A5F200C0D701 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = iosApp;
+			productName = iosApp;
+			productReference = A1B1C1D728C0A5F200C0D701 /* iosApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A1B1C1DE28C0A5F200C0D701 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1500;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					A1B1C1DD28C0A5F200C0D701 = {
+						CreatedOnToolsVersion = 15.0;
+					};
+				};
+			};
+			buildConfigurationList = A1B1C1DF28C0A5F200C0D701 /* Build configuration list for PBXProject "iosApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A1B1C1DA28C0A5F200C0D701 /* Root */;
+			productRefGroup = A1B1C1DC28C0A5F200C0D701 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A1B1C1DD28C0A5F200C0D701 /* iosApp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		A1B1C1E128C0A5F200C0D701 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Compile Kotlin Framework";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "cd \"$SRCROOT/..\"\n./gradlew :sample:app:embedAndSignAppleFrameworkForXcode";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A1B1C1E228C0A5F200C0D701 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A1B1C1D128C0A5F200C0D701 /* iOSApp.swift in Sources */,
+				A1B1C1D228C0A5F200C0D701 /* ContentView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A1B1C1E328C0A5F200C0D701 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iosApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.remote.konfig.sample.iosApp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../sample/app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+			};
+			name = Debug;
+		};
+		A1B1C1E428C0A5F200C0D701 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = iosApp/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "io.github.remote.konfig.sample.iosApp";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphonesimulator iphoneos";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../sample/app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)",
+				);
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A1B1C1E028C0A5F200C0D701 /* Build configuration list for PBXNativeTarget "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B1C1E328C0A5F200C0D701 /* Debug */,
+				A1B1C1E428C0A5F200C0D701 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A1B1C1DF28C0A5F200C0D701 /* Build configuration list for PBXProject "iosApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A1B1C1E328C0A5F200C0D701 /* Debug */,
+				A1B1C1E428C0A5F200C0D701 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A1B1C1DE28C0A5F200C0D701 /* Project object */;
+}

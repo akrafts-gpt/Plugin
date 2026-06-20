@@ -46,8 +46,10 @@ private class RemoteConfigProcessor(
 ) : SymbolProcessor {
     private val logger: KSPLogger = environment.logger
     private val codeGenerator: CodeGenerator = environment.codeGenerator
-
     override fun process(resolver: Resolver): List<KSAnnotated> {
+        val isAndroid = resolver.getClassDeclarationByName(resolver.getKSNameFromString(FRAGMENT_MANAGER.canonicalName)) != null
+        val currentPlatform = if (isAndroid) "android" else "multiplatform"
+
         val symbols = resolver.getSymbolsWithAnnotation(HILT_REMOTE_CONFIG_FULL)
         val invalid = symbols.filterNot { it.validate() }.toList()
 
@@ -63,7 +65,8 @@ private class RemoteConfigProcessor(
                 ProviderGenerator(
                     classDeclaration = declaration,
                     codeGenerator = codeGenerator,
-                    configKey = key
+                    configKey = key,
+                    platform = currentPlatform,
                 ).generate()
 
                 EditorGenerator(
@@ -78,6 +81,7 @@ private class RemoteConfigProcessor(
                     modelClass = declaration,
                     configKey = key,
                     codeGenerator = codeGenerator,
+                    platform = currentPlatform,
                 ).generate()
             }
 
@@ -93,9 +97,12 @@ private class RemoteConfigProcessor(
 private class ProviderGenerator(
     private val classDeclaration: KSClassDeclaration,
     private val codeGenerator: CodeGenerator,
-    private val configKey: String
+    private val configKey: String,
+    private val platform: String,
 ) {
     fun generate() {
+        if (platform != "android") return
+
         val packageName = classDeclaration.packageName.asString()
         val targetClass = classDeclaration.toClassName()
         val moduleName = "${targetClass.simpleName}RemoteConfigModule"
@@ -865,6 +872,7 @@ private class ScreenGenerator(
     private val modelClass: KSClassDeclaration,
     private val configKey: String,
     private val codeGenerator: CodeGenerator,
+    private val platform: String,
 ) {
     fun generate() {
         val screenSimpleName = "${modelClass.simpleName.asString()}RemoteConfigScreen"
@@ -879,9 +887,13 @@ private class ScreenGenerator(
         val modelTypeName = modelClass.toClassName()
 
         val fileSpec = FileSpec.builder(GENERATED_PACKAGE, screenSimpleName)
-            .addType(buildScreenType(screenType, dialogType))
-            .addType(buildDialogType(dialogType, modelTypeName, editorType))
-            .addType(buildBindingModule(screenType, moduleType))
+            .apply {
+                addType(buildScreenType(screenType, dialogType))
+                if (platform == "android") {
+                    addType(buildDialogType(dialogType, modelTypeName, editorType))
+                    addType(buildBindingModule(screenType, moduleType))
+                }
+            }
             .build()
 
         val source = modelClass.containingFile
@@ -895,15 +907,33 @@ private class ScreenGenerator(
     }
 
     private fun buildScreenType(screenType: ClassName, dialogType: ClassName): TypeSpec {
-        val constructor = FunSpec.constructorBuilder()
-            .addAnnotation(INJECT)
-            .build()
+        val constructorBuilder = FunSpec.constructorBuilder()
+        if (platform == "android") {
+            constructorBuilder.addAnnotation(INJECT)
+        } else {
+            constructorBuilder.addParameter("remoteConfigProvider", REMOTE_CONFIG_PROVIDER)
+            constructorBuilder.addParameter("overrideStore", OVERRIDE_STORE)
+        }
 
         val dialogTag = "${configKey}_remote_config"
 
         return TypeSpec.classBuilder(screenType)
             .addSuperinterface(REMOTE_CONFIG_SCREEN)
-            .primaryConstructor(constructor)
+            .primaryConstructor(constructorBuilder.build())
+            .apply {
+                if (platform != "android") {
+                    addProperty(
+                        PropertySpec.builder("remoteConfigProvider", REMOTE_CONFIG_PROVIDER, KModifier.PRIVATE)
+                            .initializer("remoteConfigProvider")
+                            .build()
+                    )
+                    addProperty(
+                        PropertySpec.builder("overrideStore", OVERRIDE_STORE, KModifier.PRIVATE)
+                            .initializer("overrideStore")
+                            .build()
+                    )
+                }
+            }
             .addProperty(
                 PropertySpec.builder("id", STRING, KModifier.OVERRIDE)
                     .initializer("%S", configKey)
@@ -917,8 +947,25 @@ private class ScreenGenerator(
             .addFunction(
                 FunSpec.builder("show")
                     .addModifiers(KModifier.OVERRIDE)
-                    .addParameter("fragmentManager", FRAGMENT_MANAGER)
-                    .addStatement("%T().show(fragmentManager, %S)", dialogType, dialogTag)
+                    .apply {
+                        if (platform == "android") {
+                            addParameter("fragmentManager", FRAGMENT_MANAGER)
+                            addStatement("%T().show(fragmentManager, %S)", dialogType, dialogTag)
+                        } else {
+                            val modelTypeName = modelClass.toClassName()
+                            val editorSimpleName = "${modelClass.simpleName.asString()}RemoteConfigEditor"
+                            val editorType = ClassName(GENERATED_PACKAGE, editorSimpleName)
+
+                            addStatement(
+                                "%T.showEditor(%S, %S, %T.serializer(), %T(), remoteConfigProvider, overrideStore)",
+                                REMOTE_CONFIG_DEBUG_STATE,
+                                configKey,
+                                modelClass.simpleName.asString(),
+                                modelTypeName,
+                                editorType
+                            )
+                        }
+                    }
                     .build(),
             )
             .build()
@@ -1051,8 +1098,11 @@ private val CLASS_FIELD_EDITOR = ClassName("io.github.remote.konfig.debug", "Cla
 private val LIST_FIELD_EDITOR = ClassName("io.github.remote.konfig.debug", "ListFieldEditor")
 private val POLYMORPHIC_FIELD_EDITOR = ClassName("io.github.remote.konfig.debug", "PolymorphicFieldEditor")
 private val REMOTE_CONFIG_SCREEN = ClassName("io.github.remote.konfig", "RemoteConfigScreen")
+private val REMOTE_CONFIG_PROVIDER = ClassName("io.github.remote.konfig", "RemoteConfigProvider")
+private val OVERRIDE_STORE = ClassName("io.github.remote.konfig", "OverrideStore")
 private val FRAGMENT_MANAGER = ClassName("androidx.fragment.app", "FragmentManager")
 private val REMOTE_CONFIG_DIALOG_FRAGMENT = ClassName("io.github.remote.konfig.debug", "RemoteConfigDialogFragment")
+private val REMOTE_CONFIG_DEBUG_STATE = ClassName("io.github.remote.konfig.debug", "RemoteConfigDebugState")
 private val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
 private val SERIALIZERS_MODULE_CLASS = ClassName("kotlinx.serialization.modules", "SerializersModule")
 private val SERIALIZERS_MODULE_FUNCTION = MemberName("kotlinx.serialization.modules", "SerializersModule")
